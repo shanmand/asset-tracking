@@ -7,14 +7,14 @@ import { User, UserRole } from './types';
  * Replace these values with your actual Supabase Project URL and Anon Key
  * found in Settings -> API of your Supabase dashboard.
  */
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://your-project-id.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-live-anon-key';
+const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || (process.env as any).SUPABASE_URL || 'https://your-project-id.supabase.co';
+const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || (process.env as any).SUPABASE_ANON_KEY || 'your-live-anon-key';
 
 export const isSupabaseConfigured = 
+  SUPABASE_URL && 
   SUPABASE_URL !== 'https://your-project-id.supabase.co' && 
-  SUPABASE_ANON_KEY !== 'your-live-anon-key' &&
-  SUPABASE_URL.length > 0 &&
-  SUPABASE_ANON_KEY.length > 0;
+  SUPABASE_ANON_KEY &&
+  SUPABASE_ANON_KEY !== 'your-live-anon-key';
 
 /**
  * Single Supabase Instance

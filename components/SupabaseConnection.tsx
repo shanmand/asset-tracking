@@ -117,6 +117,7 @@ const SupabaseConnection: React.FC = () => {
           <div className="bg-black/40 rounded-2xl p-6 font-mono text-xs space-y-2 border border-white/10">
             <p className="text-slate-500">[{new Date().toISOString()}] Initializing connection handshake...</p>
             <p className="text-slate-300"><span className="text-emerald-400">INFO:</span> Environment variables detected: {isSupabaseConfigured ? 'YES' : 'NO'}</p>
+            <p className="text-slate-400 text-[10px]">Checked: VITE_SUPABASE_URL, SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_ANON_KEY</p>
             {status === 'connected' && (
               <p className="text-emerald-400 font-bold">SUCCESS: Established secure tunnel to Supabase Cloud.</p>
             )}
