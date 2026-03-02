@@ -1,0 +1,164 @@
+
+-- ==========================================
+-- SHUKU CRATES & PALLETS TRACKING SCHEMA
+-- ==========================================
+
+-- 1. EXTENSIONS & TYPES
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. TABLES
+CREATE TABLE public.AssetMaster (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- Crate, Pallet
+    dimensions TEXT,
+    material TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.Locations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- Warehouse, At Customer, etc.
+    category TEXT NOT NULL, -- Home, External
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.LogisticsUnits (
+    id TEXT PRIMARY KEY,
+    truck_plate TEXT NOT NULL,
+    driver_name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.users (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name TEXT,
+    role_name TEXT DEFAULT 'Crates Department',
+    home_branch_name TEXT DEFAULT 'Kya Sands',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.FeeSchedule (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    asset_id TEXT REFERENCES public.AssetMaster(id),
+    fee_type TEXT NOT NULL,
+    amount_zar NUMERIC(12, 2) NOT NULL,
+    effective_from DATE NOT NULL,
+    effective_to DATE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.Batches (
+    id TEXT PRIMARY KEY,
+    asset_id TEXT REFERENCES public.AssetMaster(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    current_location_id TEXT REFERENCES public.Locations(id),
+    status TEXT DEFAULT 'Pending', -- Pending, Success, Lost, In-Transit
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.BatchMovements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id TEXT REFERENCES public.Batches(id),
+    from_location_id TEXT REFERENCES public.Locations(id),
+    to_location_id TEXT REFERENCES public.Locations(id),
+    logistics_id TEXT REFERENCES public.LogisticsUnits(id),
+    condition TEXT DEFAULT 'Clean',
+    origin_user_id UUID REFERENCES public.users(id),
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.ThaanSlips (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id TEXT REFERENCES public.Batches(id),
+    doc_url TEXT NOT NULL,
+    is_signed BOOLEAN DEFAULT FALSE,
+    signed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.AssetLosses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id TEXT REFERENCES public.Batches(id),
+    loss_type TEXT NOT NULL,
+    lost_quantity INTEGER NOT NULL,
+    last_known_location_id TEXT REFERENCES public.Locations(id),
+    reported_by UUID REFERENCES public.users(id),
+    notes TEXT,
+    is_rechargeable BOOLEAN DEFAULT FALSE,
+    supplier_notified BOOLEAN DEFAULT FALSE,
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.Claims (
+    id TEXT PRIMARY KEY,
+    batch_id TEXT REFERENCES public.Batches(id),
+    driver_id TEXT REFERENCES public.LogisticsUnits(id),
+    thaan_slip_id UUID REFERENCES public.ThaanSlips(id),
+    type TEXT NOT NULL, -- Damaged, Dirty
+    amount_claimed_zar NUMERIC(12, 2),
+    status TEXT DEFAULT 'Lodged',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    settled_at TIMESTAMPTZ
+);
+
+-- 3. ACCRUAL ENGINE RPC
+CREATE OR REPLACE FUNCTION calculate_batch_accrual(batch_id_input TEXT)
+RETURNS NUMERIC AS $$
+DECLARE
+    total_accrual NUMERIC := 0;
+BEGIN
+    WITH AccrualPhases AS (
+        SELECT 
+            b.id,
+            b.quantity,
+            fs.amount_zar,
+            GREATEST(b.created_at, fs.effective_from::timestamp) as phase_start,
+            LEAST(
+                COALESCE(al.timestamp, ts.signed_at, NOW()), 
+                COALESCE(fs.effective_to::timestamp, '9999-12-31'::timestamp)
+            ) as phase_end
+        FROM public.Batches b
+        JOIN public.FeeSchedule fs ON b.asset_id = fs.asset_id
+        LEFT JOIN public.AssetLosses al ON b.id = al.batch_id
+        LEFT JOIN public.ThaanSlips ts ON b.id = ts.batch_id
+        WHERE b.id = batch_id_input
+          AND fs.fee_type = 'Daily Rental (Supermarket)'
+    )
+    SELECT COALESCE(SUM(
+        EXTRACT(DAY FROM (phase_end - phase_start)) * amount_zar * quantity
+    ), 0)
+    INTO total_accrual
+    FROM AccrualPhases
+    WHERE phase_end > phase_start;
+
+    RETURN total_accrual;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. AUTH SYNC TRIGGER
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (id, full_name, role_name, home_branch_name)
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'role_name', NEW.raw_user_meta_data->>'home_branch_name');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 5. ROW LEVEL SECURITY (RLS)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.Batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.BatchMovements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.AssetLosses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins have full access" ON public.users FOR ALL TO authenticated USING (auth.uid() IN (SELECT id FROM public.users WHERE role_name = 'System Administrator'));
+CREATE POLICY "Users can view all batches" ON public.Batches FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Staff can insert movements" ON public.BatchMovements FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Executives are read-only" ON public.AssetLosses FOR SELECT TO authenticated USING (true);

@@ -1,0 +1,290 @@
+
+import React, { useState, useRef } from 'react';
+import { Truck, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
+import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
+import { MovementCondition, LocationType, AssetType, User as UserType, UserRole } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
+
+interface LogisticsOpsProps {
+  currentUser: UserType;
+}
+
+const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
+  const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
+  
+  const [origin, setOrigin] = useState(MOCK_LOCATIONS[0].id);
+  const [destination, setDestination] = useState(MOCK_LOCATIONS[3].id); 
+  const [logisticsId, setLogisticsId] = useState(MOCK_LOGISTICS[0].id);
+  const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([
+    { assetId: MOCK_ASSETS[0].id, quantity: 0 }
+  ]);
+  const [condition, setCondition] = useState(MovementCondition.CLEAN);
+  const [thaanFile, setThaanFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const [errors, setErrors] = useState<string[]>([]);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddAsset = () => !isReadOnly && setAssets([...assets, { assetId: MOCK_ASSETS[0].id, quantity: 0 }]);
+  const handleRemoveAsset = (index: number) => !isReadOnly && setAssets(assets.filter((_, i) => i !== index));
+  const handleAssetChange = (index: number, field: 'assetId' | 'quantity' | 'batchId', value: any) => {
+    if (isReadOnly) return;
+    const newAssets = [...assets];
+    newAssets[index] = { ...newAssets[index], [field]: value };
+    setAssets(newAssets);
+  };
+
+  const handleCaptureMovement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isReadOnly) return;
+    
+    setErrors([]);
+    const validationErrors: string[] = [];
+    if (assets.some(a => a.quantity <= 0)) validationErrors.push("All line items must have a quantity > 0.");
+    if (origin === destination) validationErrors.push("Origin and Destination cannot be the same.");
+    
+    const destType = MOCK_LOCATIONS.find(l => l.id === destination)?.type;
+    if (destType === LocationType.AT_CUSTOMER && !thaanFile) {
+      validationErrors.push("Customer delivery requires a THAAN Slip upload.");
+    }
+
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      if (isSupabaseConfigured) {
+        for (const item of assets) {
+          const { data: batch, error: fetchError } = await supabase
+            .from('Batches')
+            .select('quantity, current_location_id')
+            .eq('id', item.batchId || 'LB-BATCH-001')
+            .single();
+
+          if (fetchError || !batch) throw new Error(`Could not find Batch ${item.batchId}`);
+          if (batch.quantity < item.quantity) {
+            throw new Error(`Insufficient quantity in Batch ${item.batchId}. Available: ${batch.quantity}`);
+          }
+
+          const { error: moveError } = await supabase
+            .from('BatchMovements')
+            .insert([{
+              batch_id: item.batchId || 'LB-BATCH-001',
+              from_location_id: origin,
+              to_location_id: destination,
+              logistics_id: logisticsId,
+              timestamp: new Date().toISOString(),
+              condition: condition,
+              origin_user_id: currentUser.id
+            }]);
+
+          if (moveError) throw moveError;
+
+          const { error: updateError } = await supabase
+            .from('Batches')
+            .update({ 
+              current_location_id: destination,
+              status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success'
+            })
+            .eq('id', item.batchId || 'LB-BATCH-001');
+
+          if (updateError) throw updateError;
+        }
+
+        if (thaanFile && assets[0]?.batchId) {
+          const fileExt = thaanFile.name.split('.').pop();
+          const fileName = `${assets[0].batchId}-${Math.random()}.${fileExt}`;
+          const filePath = `thaan-slips/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('thaan-slips')
+            .upload(filePath, thaanFile);
+
+          if (uploadError) throw uploadError;
+
+          const { data: publicUrlData } = supabase.storage
+            .from('thaan-slips')
+            .getPublicUrl(filePath);
+
+          await supabase
+            .from('ThaanSlips')
+            .insert([{
+              batch_id: assets[0].batchId,
+              doc_url: publicUrlData.publicUrl,
+              is_signed: true,
+              signed_at: new Date().toISOString()
+            }]);
+        }
+      } else {
+        // Mock success for development
+        console.warn("Supabase not configured. Simulating movement capture success.");
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
+      setNotification({ message: "Manifest logged & batches updated successfully.", type: 'success' });
+      setAssets([{ assetId: MOCK_ASSETS[0].id, quantity: 0 }]);
+      setThaanFile(null);
+    } catch (err: any) {
+      console.error("Movement capture error:", err);
+      setNotification({ message: err.message || "Failed to record movement.", type: 'alert' });
+    } finally {
+      setIsSubmitting(false);
+      setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  const selectedTruck = MOCK_LOGISTICS.find(l => l.id === logisticsId);
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+      {isReadOnly && (
+        <div className="bg-amber-50 border border-amber-100 p-6 rounded-2xl flex items-center gap-4 animate-in fade-in">
+          <ShieldAlert className="text-amber-500" size={24} />
+          <div>
+            <p className="text-sm font-bold text-amber-900 uppercase">Executive Read-Only Mode</p>
+            <p className="text-xs text-amber-700 font-medium">Capture controls are disabled for your profile level. Operations must be logged by Crates Dept staff.</p>
+          </div>
+        </div>
+      )}
+
+      {notification && (
+        <div className={`fixed bottom-8 right-8 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-right max-w-md ${notification.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+          {notification.type === 'success' ? <CheckCircle2 size={24} /> : <AlertTriangle size={24} />}
+          <p className="text-sm font-bold">{notification.message}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${isReadOnly ? 'opacity-60 cursor-not-allowed select-none' : ''}`}>
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap size={18} className="text-emerald-400" />
+                <h3 className="font-bold text-sm uppercase tracking-widest">Movement Manifest</h3>
+              </div>
+              {isReadOnly && <Lock size={14} className="text-slate-500" />}
+            </div>
+
+            <form onSubmit={handleCaptureMovement} className="p-8 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <MapPin size={14} className="text-emerald-500" /> Origin Location
+                  </span>
+                  <select 
+                    disabled={isReadOnly}
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-slate-50 outline-none"
+                    value={origin}
+                    onChange={e => setOrigin(e.target.value)}
+                  >
+                    {MOCK_LOCATIONS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <MapPin size={14} className="text-rose-500" /> Destination
+                  </span>
+                  <select 
+                    disabled={isReadOnly}
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-slate-50 outline-none"
+                    value={destination}
+                    onChange={e => setDestination(e.target.value)}
+                  >
+                    {MOCK_LOCATIONS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Assets & Quantities</span>
+                  {!isReadOnly && <button type="button" onClick={handleAddAsset} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase tracking-widest">Add Row</button>}
+                </div>
+                <div className="space-y-3">
+                  {assets.map((a, idx) => (
+                    <div key={idx} className="flex gap-3">
+                      <select 
+                        disabled={isReadOnly}
+                        className="flex-1 border border-slate-200 rounded-xl p-3 text-sm bg-white outline-none"
+                        value={a.batchId}
+                        onChange={e => handleAssetChange(idx, 'batchId', e.target.value)}
+                      >
+                        <option value="">Select Batch Ref</option>
+                        {MOCK_BATCHES.filter(b => b.current_location_id === origin).map(b => (
+                          <option key={b.id} value={b.id}>{b.id} ({b.quantity} available)</option>
+                        ))}
+                      </select>
+                      <input 
+                        disabled={isReadOnly}
+                        type="number" 
+                        placeholder="Qty"
+                        className="w-32 border border-slate-200 rounded-xl p-3 text-sm bg-white outline-none"
+                        value={a.quantity || ''}
+                        onChange={e => handleAssetChange(idx, 'quantity', parseInt(e.target.value) || 0)}
+                      />
+                      {!isReadOnly && assets.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveAsset(idx)} className="p-3 text-slate-300 hover:text-rose-500">
+                          <X size={18} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {!isReadOnly && (
+                <>
+                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4">
+                    <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Truck size={14} /> Logistics Details</h4>
+                    <select 
+                      className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                      value={logisticsId}
+                      onChange={e => setLogisticsId(e.target.value)}
+                    >
+                      {MOCK_LOGISTICS.map(l => <option key={l.id} value={l.id}>{l.truck_plate} - {l.driver_name}</option>)}
+                    </select>
+                  </div>
+
+                  {errors.length > 0 && (
+                    <div className="p-4 bg-rose-50 rounded-xl border border-rose-100 space-y-1">
+                      {errors.map((err, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs font-medium text-rose-600"><AlertTriangle size={12} /> {err}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3"
+                  >
+                    {isSubmitting ? 'Syncing...' : 'RECORD MOVEMENT'}
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="font-bold text-slate-800 text-xs uppercase tracking-widest mb-4">Unit Summary</h3>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg"><Truck size={24} /></div>
+              <div>
+                <p className="text-lg font-bold text-slate-800 leading-none mb-1">{selectedTruck?.truck_plate || 'Unassigned'}</p>
+                <p className="text-xs text-slate-500">{selectedTruck?.driver_name || 'No Driver'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LogisticsOps;
