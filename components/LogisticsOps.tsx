@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Truck, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
-import { MovementCondition, LocationType, AssetType, User as UserType, UserRole } from '../types';
+import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, LogisticsUnit, AssetMaster, BatchMovement } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface LogisticsOpsProps {

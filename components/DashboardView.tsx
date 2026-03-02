@@ -2,8 +2,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User, History, UserCheck, Skull, MapPin, Loader2 } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
-import { LocationType, UserRole, User as UserType, Batch, AssetLoss } from '../types';
-import { supabase } from '../supabase';
+import { LocationType, UserRole, User as UserType, Batch, AssetLoss, Location, User as DBUser, AssetMaster, Claim } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface DashboardViewProps {
   currentUser: UserType;
@@ -13,11 +13,20 @@ interface DashboardViewProps {
 const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated' }) => {
   const [dbBatches, setDbBatches] = useState<Batch[]>([]);
   const [dbLosses, setDbLosses] = useState<AssetLoss[]>([]);
+  const [dbLocations, setDbLocations] = useState<Location[]>([]);
+  const [dbUsers, setDbUsers] = useState<DBUser[]>([]);
+  const [dbAssets, setDbAssets] = useState<AssetMaster[]>([]);
+  const [dbClaims, setDbClaims] = useState<Claim[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Supabase Real-time Dashboard Fetch
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (!isSupabaseConfigured) {
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
         // 1. Fetch movement_batches (Batches) with branch filter
@@ -32,14 +41,21 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           batchQuery = batchQuery.eq('current_location_id', targetBranchId);
         }
         
-        const { data: batches, error: bError } = await batchQuery;
-        if (bError) throw bError;
-        setDbBatches(batches as Batch[] || []);
+        const [batchesRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes] = await Promise.all([
+          batchQuery,
+          supabase.from('AssetLosses').select('*'),
+          supabase.from('Locations').select('*'),
+          supabase.from('users').select('*'),
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('Claims').select('*')
+        ]);
 
-        // 2. Fetch Losses
-        const { data: losses, error: lError } = await supabase.from('AssetLosses').select('*');
-        if (lError) throw lError;
-        setDbLosses(losses as AssetLoss[] || []);
+        if (batchesRes.data) setDbBatches(batchesRes.data);
+        if (lossesRes.data) setDbLosses(lossesRes.data);
+        if (locsRes.data) setDbLocations(locsRes.data);
+        if (usersRes.data) setDbUsers(usersRes.data);
+        if (assetsRes.data) setDbAssets(assetsRes.data);
+        if (claimsRes.data) setDbClaims(claimsRes.data);
 
       } catch (err) {
         console.error("Dashboard Sync Error:", err);
@@ -54,28 +70,32 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   // Merge DB data with MOCK for UI robustness
   const displayBatches = isSupabaseConfigured ? dbBatches : MOCK_BATCHES;
   const displayLosses = isSupabaseConfigured ? dbLosses : MOCK_LOSSES;
+  const displayLocations = isSupabaseConfigured ? dbLocations : MOCK_LOCATIONS;
+  const displayUsers = isSupabaseConfigured ? dbUsers : MOCK_USERS;
+  const displayAssets = isSupabaseConfigured ? dbAssets : MOCK_ASSETS;
+  const displayClaims = isSupabaseConfigured ? dbClaims : MOCK_CLAIMS;
 
   const filteredBatches = useMemo(() => {
     if (branchContext === 'Consolidated') return displayBatches;
     const branchName = branchContext === 'Kya Sands' ? 'Kya Sands' : 'KZN';
     return displayBatches.filter(b => {
-        const loc = MOCK_LOCATIONS.find(l => l.id === b.current_location_id);
+        const loc = displayLocations.find(l => l.id === b.current_location_id);
         return loc?.name.includes(branchName);
     });
-  }, [branchContext, displayBatches]);
+  }, [branchContext, displayBatches, displayLocations]);
 
   const filteredLosses = useMemo(() => {
     if (branchContext === 'Consolidated') return displayLosses;
     const branchName = branchContext === 'Kya Sands' ? 'Kya Sands' : 'KZN';
     return displayLosses.filter(l => {
-        const loc = MOCK_LOCATIONS.find(loc => loc.id === l.last_known_location_id);
+        const loc = displayLocations.find(loc => loc.id === l.last_known_location_id);
         return loc?.name.includes(branchName);
     });
-  }, [branchContext, displayLosses]);
+  }, [branchContext, displayLosses, displayLocations]);
 
   const totalPallets = filteredBatches.reduce((acc, b) => b.asset_id.includes('P') ? acc + b.quantity : acc, 0);
   const estimatedUnbilledRental = filteredBatches.length * 145.20; 
-  const pendingClaimsValue = MOCK_CLAIMS.filter(c => c.status === 'Lodged').reduce((acc, c) => acc + c.amount_claimed_zar, 0);
+  const pendingClaimsValue = displayClaims.filter(c => c.status === 'Lodged').reduce((acc, c) => acc + c.amount_claimed_zar, 0);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -112,9 +132,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredLosses.slice(0, 3).map(loss => {
                 const batch = displayBatches.find(b => b.id === loss.batch_id);
-                const reporter = MOCK_USERS.find(u => u.id === loss.reported_by);
+                const reporter = displayUsers.find(u => u.id === loss.reported_by);
                 const riskLevel = loss.lost_quantity > 20 ? 'CRITICAL' : 'MODERATE';
-                const location = MOCK_LOCATIONS.find(l => l.id === loss.last_known_location_id);
+                const location = displayLocations.find(l => l.id === loss.last_known_location_id);
                 
                 return (
                   <div key={loss.id} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
@@ -126,7 +146,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">REF: {loss.id}</span>
                        </div>
                        
-                       <p className="text-sm font-black text-slate-800 leading-tight mb-1">{loss.lost_quantity}x {MOCK_ASSETS.find(a => a.id === batch?.asset_id)?.name}</p>
+                       <p className="text-sm font-black text-slate-800 leading-tight mb-1">{loss.lost_quantity}x {displayAssets.find(a => a.id === batch?.asset_id)?.name}</p>
                        <p className="text-[10px] text-slate-400 font-bold mb-4 flex items-center gap-1"><MapPin size={10} /> {location?.name}</p>
                        <p className="text-xs text-slate-500 line-clamp-2 italic mb-6">"{loss.notes}"</p>
 
@@ -170,14 +190,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         />
         <StatCard 
           label="In Transit" 
-          value={filteredBatches.filter(b => b.status === 'In-Transit' || MOCK_LOCATIONS.find(l => l.id === b.current_location_id)?.type === LocationType.IN_TRANSIT).length.toString()} 
+          value={filteredBatches.filter(b => b.status === 'In-Transit' || displayLocations.find(l => l.id === b.current_location_id)?.type === LocationType.IN_TRANSIT).length.toString()} 
           trend="-4%" 
           trendUp={false} 
           icon={<Truck className="text-amber-500" />} 
         />
         <StatCard 
           label="Pending Claims" 
-          value={MOCK_CLAIMS.filter(c => c.status === 'Lodged').length.toString()} 
+          value={displayClaims.filter(c => c.status === 'Lodged').length.toString()} 
           trend="+1" 
           trendUp={true} 
           icon={<AlertTriangle className="text-rose-500" />} 
@@ -244,7 +264,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           </div>
           <div className="divide-y divide-slate-50 overflow-y-auto max-h-[420px]">
             {filteredBatches.map((batch, i) => {
-              const loc = MOCK_LOCATIONS.find(l => l.id === batch.current_location_id);
+              const loc = displayLocations.find(l => l.id === batch.current_location_id);
               return (
                 <div key={batch.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
                   <div className="flex items-center gap-4">
@@ -264,7 +284,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-black text-slate-800">{batch.quantity} Units</p>
-                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{MOCK_ASSETS.find(a => a.id === batch.asset_id)?.type}</p>
+                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{displayAssets.find(a => a.id === batch.asset_id)?.type}</p>
                   </div>
                 </div>
               );

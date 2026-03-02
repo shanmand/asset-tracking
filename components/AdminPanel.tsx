@@ -145,28 +145,47 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
 
   const handleWipeData = async () => {
     if (!isAdmin) return;
-    if (!window.confirm("CRITICAL WARNING: This will permanently delete ALL records from the database. This action cannot be undone. Proceed?")) return;
+    if (!window.confirm("CRITICAL WARNING: This will permanently delete ALL records from the database (Batches, Movements, Losses, Claims, etc.). This action cannot be undone. Proceed?")) return;
 
     setIsSubmitting(true);
     try {
       if (isSupabaseConfigured) {
-        // Delete in order of dependencies if needed, or just all
-        const tables = ['BatchMovements', 'ThaanSlips', 'Batches', 'AssetLosses', 'FeeSchedule', 'Locations', 'users'];
+        // Delete in order of dependencies to respect foreign key constraints
+        const tables = [
+          'Claims',
+          'ThaanSlips',
+          'BatchMovements',
+          'AssetLosses',
+          'Batches',
+          'FeeSchedule',
+          'LogisticsUnits',
+          'Locations',
+          'AssetMaster',
+          'users'
+        ];
+
         for (const table of tables) {
           // Use a filter that matches all rows. Most tables use 'id' as primary key.
-          const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
-          if (error) console.warn(`Error wiping ${table}:`, error);
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000'); 
+          
+          if (error) {
+            console.warn(`Error wiping ${table}:`, error.message);
+          }
         }
+
         await fetchFees();
-        setNotification({ msg: "Database wiped successfully. System is now clean.", type: 'success' });
+        setNotification({ msg: "System data wiped successfully. Database is now clean for production.", type: 'success' });
       } else {
         setNotification({ msg: "Supabase not connected. Mock data remains in source code but session is 'Live Mode' ready.", type: 'success' });
       }
     } catch (err: any) {
-      setNotification({ msg: "Failed to wipe data", type: 'error' });
+      setNotification({ msg: err.message || "Failed to wipe system data", type: 'error' });
     } finally {
       setIsSubmitting(false);
-      setTimeout(() => setNotification(null), 4000);
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
