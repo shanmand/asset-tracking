@@ -21,9 +21,9 @@ import {
   Trash2,
   RefreshCw,
   Search,
-  Plus
+  Plus,
+  XCircle
 } from 'lucide-react';
-import { MOCK_USERS, MOCK_ASSETS, MOCK_FEES } from '../constants';
 import { UserRole, FeeType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -32,35 +32,52 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
   
   // Fee Form State
-  const [targetAsset, setTargetAsset] = useState(MOCK_ASSETS[0].id);
+  const [targetAsset, setTargetAsset] = useState<string>('');
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().split('T')[0]);
   const [dailyRental, setDailyRental] = useState(5.15);
   const [issueFee, setIssueFee] = useState(145.00);
   const [replacementFee, setReplacementFee] = useState(135.00);
   
   const [dbFees, setDbFees] = useState<any[]>([]);
+  const [dbUsers, setDbUsers] = useState<any[]>([]);
+  const [dbAssets, setDbAssets] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
-  const fetchFees = async () => {
-    if (!isSupabaseConfigured) return;
+  const fetchData = async () => {
+    if (!isSupabaseConfigured) {
+      setDbFees([]);
+      setDbUsers([]);
+      setDbAssets([]);
+      return;
+    }
     try {
-      const { data, error } = await supabase
-        .from('FeeSchedule')
-        .select('*')
-        .eq('is_active', true);
-      if (error) throw error;
-      if (data) setDbFees(data);
+      const [feesRes, usersRes, assetsRes] = await Promise.all([
+        supabase.from('FeeSchedule').select('*').eq('is_active', true),
+        supabase.from('users').select('*'),
+        supabase.from('AssetMaster').select('*')
+      ]);
+
+      if (feesRes.data) setDbFees(feesRes.data);
+      if (usersRes.data) setDbUsers(usersRes.data);
+      if (assetsRes.data) {
+        setDbAssets(assetsRes.data);
+        if (assetsRes.data.length > 0 && !targetAsset) {
+          setTargetAsset(assetsRes.data[0].id);
+        }
+      }
     } catch (err) {
-      console.error("Error fetching fees:", err);
+      console.error("Error fetching admin data:", err);
     }
   };
 
   React.useEffect(() => {
-    fetchFees();
+    fetchData();
   }, []);
 
-  const displayFees = isSupabaseConfigured ? dbFees : MOCK_FEES;
+  const displayFees = dbFees;
+  const displayUsers = dbUsers;
+  const displayAssets = dbAssets;
 
   /**
    * Action: Introduce New Fee Schedule
@@ -99,7 +116,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           .insert(newFees);
 
         if (insertError) throw insertError;
-        await fetchFees();
+        await fetchData();
       } else {
         // Mock success for development
         console.warn("Supabase not configured. Simulating fee update success.");
@@ -135,9 +152,30 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         .eq('id', userId);
       
       if (error) throw error;
+      await fetchData();
       setNotification({ msg: `Role updated for ${userId}`, type: 'success' });
     } catch (err) {
       setNotification({ msg: "Failed to update role", type: 'error' });
+    } finally {
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!isAdmin) return;
+    if (!window.confirm("Are you sure you want to delete this user? This may fail if the user has associated records (Audit Logs, etc.).")) return;
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+      
+      if (error) throw error;
+      await fetchData();
+      setNotification({ msg: "User deleted successfully", type: 'success' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to delete user", type: 'error' });
     } finally {
       setTimeout(() => setNotification(null), 3000);
     }
@@ -179,7 +217,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           }
         }
 
-        await fetchFees();
+        await fetchData();
         setNotification({ msg: "System data wiped successfully. Database is now clean for production.", type: 'success' });
       } else {
         setNotification({ msg: "Supabase not connected. Mock data remains in source code but session is 'Live Mode' ready.", type: 'success' });
@@ -189,6 +227,36 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
     } finally {
       setIsSubmitting(false);
       setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUser, setNewUser] = useState({ id: '', name: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
+
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .insert([{ 
+          id: newUser.id, 
+          name: newUser.name, 
+          role_name: newUser.role, 
+          branch_id: newUser.branch_id 
+        }]);
+      
+      if (error) throw error;
+      await fetchData();
+      setIsAddingUser(false);
+      setNewUser({ id: '', name: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
+      setNotification({ msg: "User added successfully", type: 'success' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to add user", type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+      setTimeout(() => setNotification(null), 3000);
     }
   };
 
@@ -291,14 +359,15 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                       <Database size={12} /> Target Asset Type
                     </label>
-                    <select 
-                      disabled={!isAdmin}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold focus:ring-2 focus:ring-slate-900 outline-none transition-all"
-                      value={targetAsset}
-                      onChange={e => setTargetAsset(e.target.value)}
-                    >
-                      {MOCK_ASSETS.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}
-                    </select>
+                      <select 
+                        disabled={!isAdmin}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold focus:ring-2 focus:ring-slate-900 outline-none transition-all"
+                        value={targetAsset}
+                        onChange={e => setTargetAsset(e.target.value)}
+                      >
+                        {displayAssets.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}
+                        {displayAssets.length === 0 && <option value="">No Assets Found</option>}
+                      </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -373,10 +442,76 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                   className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm"
                 />
               </div>
-              <button disabled={!isAdmin} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50">
-                <UserPlus size={16} /> Add System User
+              <button 
+                onClick={() => setIsAddingUser(!isAddingUser)}
+                disabled={!isAdmin} 
+                className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50"
+              >
+                {isAddingUser ? <XCircle size={16} /> : <UserPlus size={16} />}
+                {isAddingUser ? 'Cancel' : 'Add System User'}
               </button>
             </div>
+
+            {isAddingUser && (
+              <form onSubmit={handleAddUser} className="p-8 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top duration-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">User ID (UUID/Email)</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg"
+                      value={newUser.id}
+                      onChange={e => setNewUser({...newUser, id: e.target.value})}
+                      placeholder="e.g. user@example.com"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Full Name</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg"
+                      value={newUser.name}
+                      onChange={e => setNewUser({...newUser, name: e.target.value})}
+                      placeholder="e.g. John Doe"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Role</label>
+                    <select 
+                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg"
+                      value={newUser.role}
+                      onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}
+                    >
+                      {Object.values(UserRole).map(role => <option key={role} value={role}>{role}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch ID</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg"
+                      value={newUser.branch_id}
+                      onChange={e => setNewUser({...newUser, branch_id: e.target.value})}
+                      placeholder="e.g. LOC-JHB-01"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button 
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-lg shadow-emerald-100"
+                  >
+                    {isSubmitting ? <RefreshCw className="animate-spin" size={14} /> : <Plus size={14} />}
+                    Confirm Add User
+                  </button>
+                </div>
+              </form>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
@@ -388,15 +523,15 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {MOCK_USERS.map(user => (
+                  {displayUsers.map(user => (
                     <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-black text-slate-400 border border-slate-200">
-                            {user.name.charAt(0)}
+                            {user.name?.charAt(0) || user.id.charAt(0)}
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-slate-800">{user.name}</p>
+                            <p className="text-sm font-bold text-slate-800">{user.name || 'Unnamed User'}</p>
                             <p className="text-[10px] text-slate-400 font-bold">{user.id}</p>
                           </div>
                         </div>
@@ -404,7 +539,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                       <td className="px-8 py-5">
                         <select 
                           disabled={!isAdmin}
-                          value={user.role}
+                          value={user.role_name || user.role}
                           onChange={(e) => handleChangeRole(user.id, e.target.value as UserRole)}
                           className="text-[10px] font-bold bg-slate-100 border-none rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-slate-900"
                         >
@@ -425,12 +560,23 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                         >
                           <Key size={16} />
                         </button>
-                        <button disabled={!isAdmin} className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all disabled:opacity-30">
+                        <button 
+                          onClick={() => handleDeleteUser(user.id)}
+                          disabled={!isAdmin} 
+                          className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all disabled:opacity-30"
+                        >
                           <Trash2 size={16} />
                         </button>
                       </td>
                     </tr>
                   ))}
+                  {displayUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-8 py-10 text-center text-slate-400 italic">
+                        No users found in Supabase.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
