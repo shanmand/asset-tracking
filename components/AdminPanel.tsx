@@ -29,7 +29,7 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 
 const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const isAdmin = currentRole === UserRole.ADMIN;
-  const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users'>('fees');
+  const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
   
   // Fee Form State
   const [targetAsset, setTargetAsset] = useState(MOCK_ASSETS[0].id);
@@ -121,6 +121,82 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
     }
   };
 
+  const handleWipeData = async () => {
+    if (!isAdmin) return;
+    if (!window.confirm("CRITICAL WARNING: This will permanently delete ALL records from the database. This action cannot be undone. Proceed?")) return;
+
+    setIsSubmitting(true);
+    try {
+      if (isSupabaseConfigured) {
+        // Delete in order of dependencies if needed, or just all
+        const tables = ['users', 'locations', 'equipment', 'FeeSchedule'];
+        for (const table of tables) {
+          const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+          if (error) console.warn(`Error wiping ${table}:`, error);
+        }
+        setNotification({ msg: "Database wiped successfully. System is now clean.", type: 'success' });
+      } else {
+        setNotification({ msg: "Supabase not connected. Mock data remains in source code but session is 'Live Mode' ready.", type: 'success' });
+      }
+    } catch (err: any) {
+      setNotification({ msg: "Failed to wipe data", type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+      setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  const renderMaintenance = () => (
+    <div className="max-w-4xl space-y-8">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-8 bg-rose-600 text-white">
+          <h3 className="text-xl font-black flex items-center gap-2 uppercase tracking-tight"><Trash2 size={24} /> Danger Zone</h3>
+          <p className="text-xs text-rose-100 font-bold uppercase tracking-widest mt-1">Destructive System Operations</p>
+        </div>
+        <div className="p-8 space-y-6">
+          <div className="flex items-start gap-6 p-6 bg-rose-50 rounded-2xl border border-rose-100">
+            <AlertTriangle className="text-rose-600 shrink-0" size={32} />
+            <div>
+              <p className="font-black text-slate-900 uppercase tracking-tight">Wipe All System Records</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                This will truncate all tables in your Supabase instance. This includes Users, Locations, Equipment, and Fee Schedules. 
+                Use this only when transitioning from <strong>Staging/UAT</strong> to <strong>Production (Live)</strong>.
+              </p>
+              <button 
+                onClick={handleWipeData}
+                disabled={isSubmitting || !isAdmin}
+                className="mt-6 px-8 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-xl shadow-rose-100 disabled:opacity-50"
+              >
+                {isSubmitting ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                Execute Full System Wipe
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <Zap className="text-amber-500 shrink-0" size={32} />
+            <div>
+              <p className="font-black text-slate-900 uppercase tracking-tight">Transition to Live Mode</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Ensure your Supabase connection is verified before going live. Once live, mock data will be ignored and the system will rely solely on your Postgres infrastructure.
+              </p>
+              <div className="mt-6 flex items-center gap-4">
+                <div className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest ${isSupabaseConfigured ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                  {isSupabaseConfigured ? 'Supabase Connected' : 'Supabase Disconnected'}
+                </div>
+                {isSupabaseConfigured && (
+                  <div className="flex items-center gap-2 text-emerald-600 font-black text-[10px] uppercase tracking-widest">
+                    <CheckCircle2 size={14} /> Ready for Production
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {notification && (
@@ -142,6 +218,12 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeSubTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
         >
           <UsersIcon size={14} /> User RBAC
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('maintenance')}
+          className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeSubTab === 'maintenance' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <Zap size={14} /> System Maintenance
         </button>
       </div>
 
@@ -230,7 +312,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeSubTab === 'users' ? (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-8 py-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
@@ -305,6 +387,8 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
             </div>
           </div>
         </div>
+      ) : (
+        renderMaintenance()
       )}
     </div>
   );
