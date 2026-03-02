@@ -1,13 +1,61 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { Search, Plus, Filter, MoreVertical, ShieldAlert } from 'lucide-react';
+import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2 } from 'lucide-react';
+import { AssetMaster, FeeSchedule } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface AssetListProps {
   isAdmin: boolean;
 }
 
 const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setAssets(MOCK_ASSETS);
+        setFees(MOCK_FEES);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [assetsRes, feesRes] = await Promise.all([
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('FeeSchedule').select('*')
+        ]);
+
+        if (assetsRes.data) setAssets(assetsRes.data);
+        if (feesRes.data) setFees(feesRes.data);
+      } catch (err) {
+        console.error("Asset List Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const filteredAssets = assets.filter(a => 
+    a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    a.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -17,6 +65,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
             type="text" 
             placeholder="Search asset ID or name..." 
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
         <div className="flex gap-3">
@@ -50,8 +100,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {MOCK_ASSETS.map(asset => {
-              const currentFee = MOCK_FEES.find(f => f.asset_id === asset.id && f.effective_to === null);
+            {filteredAssets.map(asset => {
+              const currentFee = fees.find(f => f.asset_id === asset.id && f.effective_to === null);
               return (
                 <tr key={asset.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4">
@@ -94,6 +144,13 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                 </tr>
               );
             })}
+            {filteredAssets.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-6 py-10 text-center text-slate-400 italic">
+                  No assets found matching your search.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -1,16 +1,57 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_LOCATIONS, MOCK_BATCHES, MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, TrendingUp, Info } from 'lucide-react';
-import { LocationType, LocationCategory } from '../types';
+import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, TrendingUp, Info, Loader2 } from 'lucide-react';
+import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 const InventoryDashboard: React.FC = () => {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setLocations([]);
+        setBatches([]);
+        setAssets([]);
+        setFees([]);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [locsRes, batchesRes, assetsRes, feesRes] = await Promise.all([
+          supabase.from('Locations').select('*'),
+          supabase.from('Batches').select('*'),
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('FeeSchedule').select('*')
+        ]);
+
+        if (locsRes.data) setLocations(locsRes.data);
+        if (batchesRes.data) setBatches(batchesRes.data);
+        if (assetsRes.data) setAssets(assetsRes.data);
+        if (feesRes.data) setFees(feesRes.data);
+      } catch (err) {
+        console.error("Inventory Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   // Logic: Calculate accrued costs for batches at locations
   const calculateAccruedCost = (batchId: string) => {
-    const batch = MOCK_BATCHES.find(b => b.id === batchId);
+    const batch = batches.find(b => b.id === batchId);
     if (!batch) return 0;
 
-    const fee = MOCK_FEES.find(f => f.asset_id === batch.asset_id && f.effective_to === null);
+    const fee = fees.find(f => f.asset_id === batch.asset_id && f.effective_to === null);
     if (!fee) return 0;
 
     const days = Math.floor((Date.now() - new Date(batch.created_at).getTime()) / (1000 * 60 * 60 * 24));
@@ -18,7 +59,7 @@ const InventoryDashboard: React.FC = () => {
   };
 
   const getInventoryAtLocation = (locationId: string) => {
-    return MOCK_BATCHES.filter(b => b.current_location_id === locationId);
+    return batches.filter(b => b.current_location_id === locationId);
   };
 
   const getLocationIcon = (type: LocationType) => {
@@ -32,7 +73,15 @@ const InventoryDashboard: React.FC = () => {
   };
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const totalGlobalLiability = MOCK_BATCHES.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
+  const totalGlobalLiability = batches.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -49,7 +98,7 @@ const InventoryDashboard: React.FC = () => {
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Home Locations</p>
             <p className="text-2xl font-bold text-slate-800">
-              {MOCK_LOCATIONS.filter(l => l.category === LocationCategory.HOME).length} Units
+              {locations.filter(l => l.category === LocationCategory.HOME).length} Units
             </p>
           </div>
           <Home className="text-emerald-500 opacity-20" size={40} />
@@ -58,7 +107,7 @@ const InventoryDashboard: React.FC = () => {
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">External Storage</p>
             <p className="text-2xl font-bold text-slate-800">
-              {MOCK_LOCATIONS.filter(l => l.type === LocationType.COLD_STORAGE).length} Sites
+              {locations.filter(l => l.type === LocationType.COLD_STORAGE).length} Sites
             </p>
           </div>
           <ThermometerSnowflake className="text-blue-500 opacity-20" size={40} />
@@ -79,7 +128,7 @@ const InventoryDashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-x divide-y divide-slate-100">
-          {MOCK_LOCATIONS.map(loc => {
+          {locations.map(loc => {
             const inventory = getInventoryAtLocation(loc.id);
             const locationCost = inventory.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
             const totalUnits = inventory.reduce((acc, b) => acc + b.quantity, 0);
@@ -108,7 +157,7 @@ const InventoryDashboard: React.FC = () => {
                    {inventory.length > 0 ? inventory.map(batch => (
                      <div key={batch.id} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[11px]">
                         <span className="font-bold text-slate-600">Batch #{batch.id}</span>
-                        <span className="text-slate-400">{MOCK_ASSETS.find(a => a.id === batch.asset_id)?.name}</span>
+                        <span className="text-slate-400">{assets.find(a => a.id === batch.asset_id)?.name}</span>
                         <span className="font-bold text-slate-800">{batch.quantity}</span>
                      </div>
                    )) : (

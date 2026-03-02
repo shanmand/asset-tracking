@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_THAANS, MOCK_ASSETS, MOCK_USERS } from '../constants';
-import { Skull, AlertTriangle, Truck, MapPin, User, FileText, CheckCircle2, XCircle, Search, Info, Database, CreditCard, UserCheck, ShieldAlert, Lock } from 'lucide-react';
-import { LocationType, LossType, User as UserType, UserRole } from '../types';
+import { Skull, AlertTriangle, Truck, MapPin, User, FileText, CheckCircle2, XCircle, Search, Info, Database, CreditCard, UserCheck, ShieldAlert, Lock, Loader2 } from 'lucide-react';
+import { LocationType, LossType, User as UserType, UserRole, Batch, BatchMovement, Location, LogisticsUnit, ThaanSlip, AssetMaster, User as DBUser } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface LossRecorderProps {
   currentUser: UserType;
@@ -11,6 +12,15 @@ interface LossRecorderProps {
 const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
   
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [movements, setMovements] = useState<BatchMovement[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [thaans, setThaans] = useState<ThaanSlip[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [users, setUsers] = useState<DBUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [lossType, setLossType] = useState<LossType>(LossType.MISSING);
   const [isRechargeable, setIsRechargeable] = useState(false);
@@ -29,27 +39,70 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   } | null>(null);
 
   useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setBatches([]);
+        setMovements([]);
+        setLocations([]);
+        setLogistics([]);
+        setThaans([]);
+        setAssets([]);
+        setUsers([]);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [bRes, mRes, lRes, logRes, tRes, aRes, uRes] = await Promise.all([
+          supabase.from('Batches').select('*'),
+          supabase.from('BatchMovements').select('*'),
+          supabase.from('Locations').select('*'),
+          supabase.from('LogisticsUnits').select('*'),
+          supabase.from('ThaanSlips').select('*'),
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('users').select('*')
+        ]);
+
+        if (bRes.data) setBatches(bRes.data);
+        if (mRes.data) setMovements(mRes.data);
+        if (lRes.data) setLocations(lRes.data);
+        if (logRes.data) setLogistics(logRes.data);
+        if (tRes.data) setThaans(tRes.data);
+        if (aRes.data) setAssets(aRes.data);
+        if (uRes.data) setUsers(uRes.data);
+      } catch (err) {
+        console.error("Loss Recorder Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  useEffect(() => {
     if (!selectedBatchId) {
       setLastKnown(null);
       return;
     }
 
-    const batch = MOCK_BATCHES.find(b => b.id === selectedBatchId);
+    const batch = batches.find(b => b.id === selectedBatchId);
     if (!batch) return;
 
-    const movements = MOCK_MOVEMENTS.filter(m => m.batch_id === selectedBatchId)
+    const batchMovements = movements.filter(m => m.batch_id === selectedBatchId)
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
-    const lastMv = movements[0];
-    const loc = MOCK_LOCATIONS.find(l => l.id === (lastMv?.to_location_id || batch.current_location_id));
-    const logistics = lastMv?.logistics_id ? MOCK_LOGISTICS.find(l => l.id === lastMv.logistics_id) : null;
-    const thaan = MOCK_THAANS.find(t => t.batch_id === selectedBatchId);
+    const lastMv = batchMovements[0];
+    const loc = locations.find(l => l.id === (lastMv?.to_location_id || batch.current_location_id));
+    const logUnit = lastMv?.logistics_id ? logistics.find(l => l.id === lastMv.logistics_id) : null;
+    const thaan = thaans.find(t => t.batch_id === selectedBatchId);
 
     setLastKnown({
       location: loc?.name || 'Unknown',
       locationType: loc?.type || LocationType.WAREHOUSE,
-      driver: logistics?.driver_name,
-      truck: logistics?.truck_plate,
+      driver: logUnit?.driver_name,
+      truck: logUnit?.truck_plate,
       thaanUrl: thaan?.doc_url,
       customerName: loc?.type === LocationType.AT_CUSTOMER ? loc.name : undefined
     });
@@ -63,7 +116,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         setLossType(LossType.MISSING);
         setIsRechargeable(false);
     }
-  }, [selectedBatchId]);
+  }, [selectedBatchId, batches, movements, locations, logistics, thaans]);
 
   const handleReportLoss = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +124,25 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
 
     setIsProcessing(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.from('AssetLosses').insert([{
+          batch_id: selectedBatchId,
+          lost_quantity: lostQty,
+          loss_type: lossType,
+          is_rechargeable: isRechargeable,
+          notes: notes,
+          reported_by: currentUser.id,
+          last_known_location_id: batches.find(b => b.id === selectedBatchId)?.current_location_id
+        }]);
+        if (error) throw error;
+
+        // Update batch status to Lost if fully lost
+        const batch = batches.find(b => b.id === selectedBatchId);
+        if (batch && lostQty >= batch.quantity) {
+          await supabase.from('Batches').update({ status: 'Lost' }).eq('id', selectedBatchId);
+        }
+      }
+
       setSuccessMsg(`Loss forensic audit complete for Batch #${selectedBatchId}.`);
       setSelectedBatchId('');
       setNotes('');
@@ -83,7 +154,15 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     }
   };
 
-  const selectedBatch = MOCK_BATCHES.find(b => b.id === selectedBatchId);
+  const selectedBatch = batches.find(b => b.id === selectedBatchId);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -129,7 +208,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
                     onChange={e => setSelectedBatchId(e.target.value)}
                   >
                     <option value="">-- Choose Active Batch --</option>
-                    {MOCK_BATCHES.filter(b => b.status !== 'Lost').map(b => (
+                    {batches.filter(b => b.status !== 'Lost').map(b => (
                       <option key={b.id} value={b.id}>{b.id} ({b.quantity} Units)</option>
                     ))}
                   </select>

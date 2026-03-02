@@ -12,10 +12,11 @@ interface LogisticsOpsProps {
 const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
   
-  const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
-  const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>(isSupabaseConfigured ? [] : MOCK_LOGISTICS);
-  const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>(isSupabaseConfigured ? [] : MOCK_ASSETS);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState(''); 
@@ -31,17 +32,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) {
-      setLocations(MOCK_LOCATIONS);
-      setBatches(MOCK_BATCHES);
-      setLogistics(MOCK_LOGISTICS);
-      setAssetsMaster(MOCK_ASSETS);
-      setOrigin(MOCK_LOCATIONS[0].id);
-      setDestination(MOCK_LOCATIONS[3].id);
-      setLogisticsId(MOCK_LOGISTICS[0].id);
-      setAssets([{ assetId: MOCK_ASSETS[0].id, quantity: 0 }]);
+      setLocations([]);
+      setBatches([]);
+      setLogistics([]);
+      setAssetsMaster([]);
+      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
     try {
       const [locsRes, batchesRes, logsRes, assetsRes] = await Promise.all([
         supabase.from('Locations').select('*'),
@@ -69,6 +68,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
       }
     } catch (err) {
       console.error("Error fetching logistics data:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 

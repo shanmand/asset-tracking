@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MOCK_BATCHES, MOCK_FEES, MOCK_CLAIMS, MOCK_ASSETS, MOCK_THAANS, MOCK_LOCATIONS } from '../constants';
 import { 
   TrendingDown, 
@@ -22,8 +22,8 @@ import {
   Loader2,
   CheckCircle2
 } from 'lucide-react';
-import { LocationType, LocationCategory } from '../types';
-import { supabase } from '../supabase';
+import { LocationType, LocationCategory, Batch, Location, FeeSchedule, ThaanSlip, AssetMaster, AssetLoss } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface FinancialReportProps {
   branchContext?: 'Kya Sands' | 'Durban' | 'Consolidated';
@@ -38,11 +38,59 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
 
   const [selectedBranch, setSelectedBranch] = useState<string>(getInitialBranch());
   
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [thaans, setThaans] = useState<ThaanSlip[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [losses, setLosses] = useState<AssetLoss[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   // RPC State
   const [testBatchId, setTestBatchId] = useState('LB-BATCH-001');
   const [rpcResult, setRpcResult] = useState<number | null>(null);
   const [rpcLoading, setRpcLoading] = useState(false);
   const [rpcError, setRpcError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setBatches([]);
+        setLocations([]);
+        setFees([]);
+        setThaans([]);
+        setAssets([]);
+        setLosses([]);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [bRes, lRes, fRes, tRes, aRes, lossRes] = await Promise.all([
+          supabase.from('Batches').select('*'),
+          supabase.from('Locations').select('*'),
+          supabase.from('FeeSchedule').select('*'),
+          supabase.from('ThaanSlips').select('*'),
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('AssetLosses').select('*')
+        ]);
+
+        if (bRes.data) setBatches(bRes.data);
+        if (lRes.data) setLocations(lRes.data);
+        if (fRes.data) setFees(fRes.data);
+        if (tRes.data) setThaans(tRes.data);
+        if (aRes.data) setAssets(aRes.data);
+        if (lossRes.data) setLosses(lossRes.data);
+      } catch (err) {
+        console.error("Financial Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   /**
    * Action: Run Supabase RPC Accrual Engine
@@ -70,41 +118,72 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
     }
   };
 
-  const branchBatches = MOCK_BATCHES.filter(batch => {
-    if (selectedBranch === 'Johannesburg Plant') return ['B-001', 'B-002'].includes(batch.id);
-    return ['B-003', 'B-004'].includes(batch.id);
-  });
+  const branchBatches = useMemo(() => {
+    return batches.filter(batch => {
+      const loc = locations.find(l => l.id === batch.current_location_id);
+      return loc?.name === selectedBranch;
+    });
+  }, [batches, locations, selectedBranch]);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const branchAccruedRental = branchBatches.reduce((total, batch) => {
-    const loc = MOCK_LOCATIONS.find(l => l.id === batch.current_location_id);
-    const fee = MOCK_FEES.find(f => f.asset_id === batch.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
-    
-    if (fee && loc && loc.type !== LocationType.AT_CUSTOMER && loc.type !== LocationType.RETURNING) {
-      const ageDays = Math.floor((Date.now() - new Date(batch.created_at).getTime()) / (1000 * 60 * 60 * 24));
-      return total + (batch.quantity * fee.amount_zar * ageDays);
-    }
-    return total;
-  }, 0);
+  const branchAccruedRental = useMemo(() => {
+    return branchBatches.reduce((total, batch) => {
+      const loc = locations.find(l => l.id === batch.current_location_id);
+      const fee = fees.find(f => f.asset_id === batch.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
+      
+      if (fee && loc && loc.type !== LocationType.AT_CUSTOMER && loc.type !== LocationType.RETURNING) {
+        const ageDays = Math.floor((Date.now() - new Date(batch.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        return total + (batch.quantity * fee.amount_zar * ageDays);
+      }
+      return total;
+    }, 0);
+  }, [branchBatches, locations, fees]);
 
-  const branchUncreditedIssueFees = branchBatches.reduce((total, batch) => {
-    const fee = MOCK_FEES.find(f => f.asset_id === batch.asset_id && f.fee_type.includes('Issue Fee') && f.effective_to === null);
-    const thaan = MOCK_THAANS.find(t => t.batch_id === batch.id && t.is_signed);
-    if (fee && !thaan) return total + (batch.quantity * fee.amount_zar);
-    return total;
-  }, 0);
+  const branchUncreditedIssueFees = useMemo(() => {
+    return branchBatches.reduce((total, batch) => {
+      const fee = fees.find(f => f.asset_id === batch.asset_id && f.fee_type.includes('Issue Fee') && f.effective_to === null);
+      const thaan = thaans.find(t => t.batch_id === batch.id && t.is_signed);
+      if (fee && !thaan) return total + (batch.quantity * fee.amount_zar);
+      return total;
+    }, 0);
+  }, [branchBatches, fees, thaans]);
 
-  const totalAssetsInCustody = branchBatches.reduce((sum, b) => sum + b.quantity, 0);
-  const monthlyLossQty = selectedBranch === 'Johannesburg Plant' ? 12 : 5;
-  const monthlyLossValue = monthlyLossQty * 150.00;
+  const totalAssetsInCustody = useMemo(() => branchBatches.reduce((sum, b) => sum + b.quantity, 0), [branchBatches]);
+  
+  const branchLosses = useMemo(() => {
+    return losses.filter(l => {
+      const loc = locations.find(loc => loc.id === l.last_known_location_id);
+      return loc?.name === selectedBranch;
+    });
+  }, [losses, locations, selectedBranch]);
 
-  const locationBreakdown = branchBatches.reduce((acc: any, b) => {
-    const loc = MOCK_LOCATIONS.find(l => l.id === b.current_location_id);
-    const locName = loc?.name || 'Unknown';
-    acc[locName] = (acc[locName] || 0) + b.quantity;
-    return acc;
-  }, {});
+  const monthlyLossQty = useMemo(() => branchLosses.reduce((sum, l) => sum + l.lost_quantity, 0), [branchLosses]);
+  
+  const monthlyLossValue = useMemo(() => {
+    return branchLosses.reduce((total, l) => {
+      const batch = batches.find(b => b.id === l.batch_id);
+      const fee = fees.find(f => f.asset_id === batch?.asset_id && f.fee_type.includes('Replacement') && f.effective_to === null);
+      return total + (l.lost_quantity * (fee?.amount_zar || 0));
+    }, 0);
+  }, [branchLosses, batches, fees]);
+
+  const locationBreakdown = useMemo(() => {
+    return branchBatches.reduce((acc: any, b) => {
+      const loc = locations.find(l => l.id === b.current_location_id);
+      const locName = loc?.name || 'Unknown';
+      acc[locName] = (acc[locName] || 0) + b.quantity;
+      return acc;
+    }, {});
+  }, [branchBatches, locations]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-12">

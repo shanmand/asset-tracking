@@ -23,6 +23,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!isSupabaseConfigured) {
+        setDbBatches([]);
+        setDbLosses([]);
+        setDbLocations([]);
+        setDbUsers([]);
+        setDbAssets([]);
+        setDbClaims([]);
         setIsLoading(false);
         return;
       }
@@ -68,12 +74,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   }, [branchContext]);
 
   // Merge DB data with MOCK for UI robustness
-  const displayBatches = isSupabaseConfigured ? dbBatches : MOCK_BATCHES;
-  const displayLosses = isSupabaseConfigured ? dbLosses : MOCK_LOSSES;
-  const displayLocations = isSupabaseConfigured ? dbLocations : MOCK_LOCATIONS;
-  const displayUsers = isSupabaseConfigured ? dbUsers : MOCK_USERS;
-  const displayAssets = isSupabaseConfigured ? dbAssets : MOCK_ASSETS;
-  const displayClaims = isSupabaseConfigured ? dbClaims : MOCK_CLAIMS;
+  const displayBatches = dbBatches;
+  const displayLosses = dbLosses;
+  const displayLocations = dbLocations;
+  const displayUsers = dbUsers;
+  const displayAssets = dbAssets;
+  const displayClaims = dbClaims;
 
   const filteredBatches = useMemo(() => {
     if (branchContext === 'Consolidated') return displayBatches;
@@ -184,28 +190,28 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         <StatCard 
           label="Active Batches" 
           value={filteredBatches.length.toString()} 
-          trend="+2.5%" 
+          trend="0%" 
           trendUp={true} 
           icon={<Package className="text-blue-500" />} 
         />
         <StatCard 
           label="In Transit" 
           value={filteredBatches.filter(b => b.status === 'In-Transit' || displayLocations.find(l => l.id === b.current_location_id)?.type === LocationType.IN_TRANSIT).length.toString()} 
-          trend="-4%" 
+          trend="0%" 
           trendUp={false} 
           icon={<Truck className="text-amber-500" />} 
         />
         <StatCard 
           label="Pending Claims" 
           value={displayClaims.filter(c => c.status === 'Lodged').length.toString()} 
-          trend="+1" 
+          trend="0" 
           trendUp={true} 
           icon={<AlertTriangle className="text-rose-500" />} 
         />
         <StatCard 
           label="Avg Turnaround" 
-          value="4.2 Days" 
-          trend="0.5%" 
+          value="0.0 Days" 
+          trend="0%" 
           trendUp={true} 
           icon={<TrendingUp className="text-emerald-500" />} 
         />

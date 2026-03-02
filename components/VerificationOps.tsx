@@ -1,56 +1,140 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_USERS } from '../constants';
-import { CheckCircle2, AlertTriangle, Truck, MapPin, Search, Zap, Package, UserCheck, XCircle, History, Calculator, ClipboardCheck } from 'lucide-react';
-import { Batch, User as UserType, MovementCondition } from '../types';
+import { CheckCircle2, AlertTriangle, Truck, MapPin, Search, Zap, Package, UserCheck, XCircle, History, Calculator, ClipboardCheck, Loader2 } from 'lucide-react';
+import { Batch, User as UserType, MovementCondition, BatchMovement, LogisticsUnit, AssetMaster } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface VerificationOpsProps {
   currentUser: UserType;
 }
 
 const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [movements, setMovements] = useState<BatchMovement[]>([]);
+  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [receivedQty, setReceivedQty] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setBatches([]);
+        setMovements([]);
+        setLogistics([]);
+        setAssets([]);
+        setUsers([]);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [bRes, mRes, lRes, aRes, uRes] = await Promise.all([
+          supabase.from('Batches').select('*'),
+          supabase.from('BatchMovements').select('*'),
+          supabase.from('LogisticsUnits').select('*'),
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('users').select('*')
+        ]);
+
+        if (bRes.data) setBatches(bRes.data);
+        if (mRes.data) setMovements(mRes.data);
+        if (lRes.data) setLogistics(lRes.data);
+        if (aRes.data) setAssets(aRes.data);
+        if (uRes.data) setUsers(uRes.data);
+      } catch (err) {
+        console.error("Verification Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   // Batches currently "In Transit" destined for the user's branch
   const incomingBatches = useMemo(() => {
-    return MOCK_BATCHES.filter(b => {
-      const lastMovement = MOCK_MOVEMENTS
+    return batches.filter(b => {
+      const lastMovement = movements
         .filter(m => m.batch_id === b.id)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
       
       // Filter for batches coming to this specific user's branch
       return b.status === 'In-Transit' || (lastMovement && lastMovement.to_location_id === currentUser.branch_id && b.status === 'Pending');
     });
-  }, [currentUser.branch_id]);
+  }, [currentUser.branch_id, batches, movements]);
 
   const selectedBatch = incomingBatches.find(b => b.id === selectedBatchId);
-  const lastMovement = selectedBatch ? MOCK_MOVEMENTS.filter(m => m.batch_id === selectedBatch.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : null;
-  const dispatcher = lastMovement ? MOCK_USERS.find(u => u.id === lastMovement.origin_user_id) : null;
-  const truck = lastMovement?.logistics_id ? MOCK_LOGISTICS.find(l => l.id === lastMovement.logistics_id) : null;
+  const lastMovement = selectedBatch ? movements.filter(m => m.batch_id === selectedBatch.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : null;
+  const dispatcher = lastMovement ? users.find(u => u.id === lastMovement.origin_user_id) : null;
+  const truck = lastMovement?.logistics_id ? logistics.find(l => l.id === lastMovement.logistics_id) : null;
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBatch) return;
 
     setIsProcessing(true);
     const variance = receivedQty - selectedBatch.quantity;
     
-    // Simulate DB logic
-    console.log("Verified by:", currentUser.id);
-    console.log("Expected:", selectedBatch.quantity, "Received:", receivedQty, "Variance:", variance);
+    try {
+      if (isSupabaseConfigured) {
+        // Update batch status and quantity if needed
+        const { error: updateError } = await supabase
+          .from('Batches')
+          .update({ 
+            status: 'Success',
+            quantity: receivedQty // Update to physical count
+          })
+          .eq('id', selectedBatch.id);
 
-    setTimeout(() => {
+        if (updateError) throw updateError;
+
+        // Log audit if variance
+        if (variance !== 0) {
+          await supabase.from('AuditLogs').insert([{
+            user_id: currentUser.id,
+            action: 'QUANTITY_VARIANCE_REPORTED',
+            entity_type: 'Batch',
+            entity_id: selectedBatch.id,
+            old_value: selectedBatch.quantity.toString(),
+            new_value: receivedQty.toString(),
+            timestamp: new Date().toISOString()
+          }]);
+        }
+      }
+
       setSuccessMsg(`Verification Logged. ${variance !== 0 ? `Variance of ${variance} reported for accountability.` : 'Batch matched system count.'}`);
-      setIsProcessing(false);
       setSelectedBatchId('');
       setReceivedQty(0);
       setNotes('');
-    }, 1500);
+      
+      // Refresh data
+      if (isSupabaseConfigured) {
+        const { data: bRes } = await supabase.from('Batches').select('*');
+        if (bRes) setBatches(bRes);
+      }
+    } catch (err) {
+      console.error("Verification Error:", err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -100,7 +184,7 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
                            <p className="font-black text-slate-800">#{b.id}</p>
                            <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded shadow-sm text-slate-500 uppercase">{b.quantity} Units</span>
                         </div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{MOCK_ASSETS.find(a => a.id === b.asset_id)?.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{assets.find(a => a.id === b.asset_id)?.name}</p>
                      </button>
                    )) : (
                      <div className="col-span-2 py-10 text-center text-slate-400 italic text-sm">No incoming transit detected for this branch.</div>
@@ -201,7 +285,7 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
                 <History className="text-slate-400" size={16} /> Recent Branch Intake
               </h4>
               <div className="space-y-4">
-                 {MOCK_MOVEMENTS.slice(0, 3).map(m => (
+                 {movements.slice(0, 3).map(m => (
                     <div key={m.id} className="flex justify-between items-center text-[11px] group">
                        <div className="flex items-center gap-2">
                           <Package size={12} className="text-slate-300" />

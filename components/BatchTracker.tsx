@@ -22,14 +22,14 @@ const BatchTracker: React.FC = () => {
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) {
-      setBatches(MOCK_BATCHES);
-      setThaans(MOCK_THAANS);
-      setMovements(MOCK_MOVEMENTS);
-      setLocations(MOCK_LOCATIONS);
-      setLogistics(MOCK_LOGISTICS);
-      setFees(MOCK_FEES);
-      setAssetsMaster(MOCK_ASSETS);
-      if (MOCK_BATCHES.length > 0) setSelectedBatchId(MOCK_BATCHES[0].id);
+      setBatches([]);
+      setThaans([]);
+      setMovements([]);
+      setLocations([]);
+      setLogistics([]);
+      setFees([]);
+      setAssetsMaster([]);
+      setIsLoading(false);
       return;
     }
 

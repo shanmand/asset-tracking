@@ -1,8 +1,50 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_AUDIT_LOGS, MOCK_USERS } from '../constants';
-import { Activity, Clock, User, ArrowRight, Shield, Database, Receipt, Zap } from 'lucide-react';
+import { Activity, Clock, User, ArrowRight, Shield, Database, Receipt, Zap, Loader2 } from 'lucide-react';
+import { AuditLog, User as DBUser } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 const AuditView: React.FC = () => {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [users, setUsers] = useState<DBUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setLogs(MOCK_AUDIT_LOGS);
+        setUsers(MOCK_USERS);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [logsRes, usersRes] = await Promise.all([
+          supabase.from('AuditLogs').select('*').order('timestamp', { ascending: false }),
+          supabase.from('users').select('*')
+        ]);
+
+        if (logsRes.data) setLogs(logsRes.data);
+        if (usersRes.data) setUsers(usersRes.data);
+      } catch (err) {
+        console.error("Audit Logs Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -32,7 +74,7 @@ const AuditView: React.FC = () => {
               </h4>
               <div className="space-y-6">
                  <div>
-                    <p className="text-2xl font-black">2.4k</p>
+                    <p className="text-2xl font-black">{logs.length}</p>
                     <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Total Events Logged</p>
                  </div>
                  <div>
@@ -51,8 +93,8 @@ const AuditView: React.FC = () => {
         <div className="lg:col-span-3">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-8">
             <div className="relative pl-8 border-l-2 border-slate-100 space-y-10">
-              {MOCK_AUDIT_LOGS.map((log) => {
-                const user = MOCK_USERS.find(u => u.id === log.user_id);
+              {logs.map((log) => {
+                const user = users.find(u => u.id === log.user_id);
                 return (
                   <div key={log.id} className="relative animate-in slide-in-from-left duration-500">
                     <div className="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-slate-900 ring-4 ring-slate-50 flex items-center justify-center">
@@ -79,11 +121,11 @@ const AuditView: React.FC = () => {
                       <div className="md:text-right shrink-0">
                         <div className="flex items-center md:justify-end gap-2">
                            <div className="text-right">
-                              <p className="text-[10px] font-black text-slate-800 leading-none">{user?.name}</p>
-                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{user?.role}</p>
+                              <p className="text-[10px] font-black text-slate-800 leading-none">{user?.name || log.user_id}</p>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{user?.role || 'System'}</p>
                            </div>
                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200">
-                             {user?.name.charAt(0)}
+                             {user?.name?.charAt(0) || 'U'}
                            </div>
                         </div>
                       </div>
@@ -91,6 +133,9 @@ const AuditView: React.FC = () => {
                   </div>
                 );
               })}
+              {logs.length === 0 && (
+                <div className="py-20 text-center text-slate-400 italic">No audit records found.</div>
+              )}
             </div>
             
             <button className="w-full mt-10 py-3 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-all">

@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   MOCK_BATCHES, 
   MOCK_FEES, 
@@ -10,7 +10,7 @@ import {
   MOCK_MOVEMENTS,
   MOCK_THAANS 
 } from '../constants';
-import { FeeType, LocationType, LossType } from '../types';
+import { FeeType, LocationType, LossType, Batch, FeeSchedule, AssetLoss, Claim, AssetMaster, Location, BatchMovement, ThaanSlip } from '../types';
 import { 
   Receipt, 
   TrendingUp, 
@@ -27,37 +27,94 @@ import {
   Tag,
   Skull,
   History,
-  ShieldAlert
+  ShieldAlert,
+  Loader2
 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface SupplierSettlementReportProps {
   isAdmin: boolean;
 }
 
 const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isAdmin }) => {
-  const currentMonth = "May 2025"; // In a real app, this would be dynamic
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [losses, setLosses] = useState<AssetLoss[]>([]);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [movements, setMovements] = useState<BatchMovement[]>([]);
+  const [thaans, setThaans] = useState<ThaanSlip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const currentMonth = "May 2025"; 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setBatches(MOCK_BATCHES);
+        setFees(MOCK_FEES);
+        setLosses(MOCK_LOSSES);
+        setClaims(MOCK_CLAIMS);
+        setAssets(MOCK_ASSETS);
+        setLocations(MOCK_LOCATIONS);
+        setMovements(MOCK_MOVEMENTS);
+        setThaans(MOCK_THAANS);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes] = await Promise.all([
+          supabase.from('Batches').select('*'),
+          supabase.from('FeeSchedule').select('*'),
+          supabase.from('AssetLosses').select('*'),
+          supabase.from('Claims').select('*'),
+          supabase.from('AssetMaster').select('*'),
+          supabase.from('Locations').select('*'),
+          supabase.from('BatchMovements').select('*'),
+          supabase.from('ThaanSlips').select('*')
+        ]);
+
+        if (bRes.data) setBatches(bRes.data);
+        if (fRes.data) setFees(fRes.data);
+        if (lRes.data) setLosses(lRes.data);
+        if (cRes.data) setClaims(cRes.data);
+        if (aRes.data) setAssets(aRes.data);
+        if (locRes.data) setLocations(locRes.data);
+        if (mRes.data) setMovements(mRes.data);
+        if (tRes.data) setThaans(tRes.data);
+      } catch (err) {
+        console.error("Settlement Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const reportData = useMemo(() => {
     // 1. Rental Reconciliation
-    const rentals = MOCK_BATCHES.filter(b => {
-        const fee = MOCK_FEES.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
+    const rentals = batches.filter(b => {
+        const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
         return !!fee;
     }).map(b => {
-        const fee = MOCK_FEES.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
-        const loss = MOCK_LOSSES.find(l => l.batch_id === b.id);
+        const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
+        const loss = losses.find(l => l.batch_id === b.id);
         
-        // Stop date is Loss date, Transfer date, or Now
         const endDate = loss ? new Date(loss.timestamp) : new Date();
         const startDate = new Date(b.created_at);
         const billableDays = Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
         const totalZar = billableDays * (fee?.amount_zar || 0) * b.quantity;
         
-        const branch = MOCK_LOCATIONS.find(l => l.id === b.current_location_id)?.name || "Unallocated";
+        const branch = locations.find(l => l.id === b.current_location_id)?.name || "Unallocated";
 
         return { 
             id: b.id, 
-            asset: MOCK_ASSETS.find(a => a.id === b.asset_id)?.name,
+            asset: assets.find(a => a.id === b.asset_id)?.name,
             qty: b.quantity,
             days: billableDays,
             rate: fee?.amount_zar || 0,
@@ -68,15 +125,15 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     });
 
     // 2. Loss & Replacement Settlement
-    const losses = MOCK_LOSSES.map(l => {
-        const batch = MOCK_BATCHES.find(b => b.id === l.batch_id);
-        const fee = MOCK_FEES.find(f => f.asset_id === batch?.asset_id && f.fee_type === FeeType.REPLACEMENT_FEE);
+    const lossItems = losses.map(l => {
+        const batch = batches.find(b => b.id === l.batch_id);
+        const fee = fees.find(f => f.asset_id === batch?.asset_id && f.fee_type === FeeType.REPLACEMENT_FEE);
         const amount = l.lost_quantity * (fee?.amount_zar || 0);
-        const branch = MOCK_LOCATIONS.find(loc => loc.id === l.last_known_location_id)?.name || "Unallocated";
+        const branch = locations.find(loc => loc.id === l.last_known_location_id)?.name || "Unallocated";
         
         return {
             id: l.id,
-            asset: MOCK_ASSETS.find(a => a.id === batch?.asset_id)?.name,
+            asset: assets.find(a => a.id === batch?.asset_id)?.name,
             qty: l.lost_quantity,
             reason: l.loss_type,
             fee: fee?.amount_zar || 0,
@@ -85,16 +142,14 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         };
     });
 
-    // 3. QSR Penalties (Items returned to supplier without THAAN)
-    // For mock logic: Assume any movement to LocationType.RETURNING without a linked THAAN is a penalty.
-    const penalties = MOCK_MOVEMENTS.filter(m => {
-        const toLoc = MOCK_LOCATIONS.find(l => l.id === m.to_location_id);
-        const thaan = MOCK_THAANS.find(t => t.batch_id === m.batch_id);
+    // 3. QSR Penalties
+    const penalties = movements.filter(m => {
+        const toLoc = locations.find(l => l.id === m.to_location_id);
+        const thaan = thaans.find(t => t.batch_id === m.batch_id);
         return toLoc?.type === LocationType.RETURNING && !thaan;
     }).map(m => {
-        const penaltyFee = 250.00; // Mock fixed penalty
-        const batch = MOCK_BATCHES.find(b => b.id === m.batch_id);
-        const branch = MOCK_LOCATIONS.find(l => l.id === m.from_location_id)?.name || "Unallocated";
+        const penaltyFee = 250.00; 
+        const branch = locations.find(l => l.id === m.from_location_id)?.name || "Unallocated";
         return {
             id: m.batch_id,
             reason: "Missing THAAN Slip on Return",
@@ -103,9 +158,9 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         };
     });
 
-    // 4. Claims Offsets (Damaged/Dirty accepted claims)
-    const offsets = MOCK_CLAIMS.filter(c => c.status === 'Accepted').map(c => {
-        const branch = "Johannesburg Plant"; // Usually credited back to branch
+    // 4. Claims Offsets
+    const offsets = claims.filter(c => c.status === 'Accepted').map(c => {
+        const branch = "Johannesburg Plant"; 
         return {
             id: c.id,
             reason: `Claim Accepted (${c.type})`,
@@ -116,7 +171,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
 
     // Subtotals
     const rentalSubtotal = rentals.reduce((acc, r) => acc + r.total, 0);
-    const lossSubtotal = losses.reduce((acc, l) => acc + l.total, 0);
+    const lossSubtotal = lossItems.reduce((acc, l) => acc + l.total, 0);
     const penaltySubtotal = penalties.reduce((acc, p) => acc + p.total, 0);
     const offsetSubtotal = offsets.reduce((acc, o) => acc + o.total, 0);
     
@@ -124,7 +179,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
 
     // Branch Allocation
     const branchBreakdown: Record<string, number> = {};
-    [...rentals, ...losses, ...penalties].forEach(item => {
+    [...rentals, ...lossItems, ...penalties].forEach(item => {
         branchBreakdown[item.branch] = (branchBreakdown[item.branch] || 0) + item.total;
     });
     offsets.forEach(item => {
@@ -132,11 +187,19 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     });
 
     return { 
-        rentals, losses, penalties, offsets, 
+        rentals, losses: lossItems, penalties, offsets, 
         rentalSubtotal, lossSubtotal, penaltySubtotal, offsetSubtotal, 
         grandTotal, branchBreakdown 
     };
-  }, []);
+  }, [batches, fees, losses, claims, assets, locations, movements, thaans]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-20">

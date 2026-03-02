@@ -152,6 +152,8 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
       if (isSupabaseConfigured) {
         // Delete in order of dependencies to respect foreign key constraints
         const tables = [
+          'AuditLogs',
+          'ClaimAudits',
           'Claims',
           'ThaanSlips',
           'BatchMovements',
@@ -165,11 +167,12 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         ];
 
         for (const table of tables) {
-          // Use a filter that matches all rows. Most tables use 'id' as primary key.
+          // Use a filter that matches all rows. 
+          // .neq('id', '_') is a safe way to match all string/uuid IDs that aren't a single underscore
           const { error } = await supabase
             .from(table)
             .delete()
-            .neq('id', '00000000-0000-0000-0000-000000000000'); 
+            .neq('id', '_'); 
           
           if (error) {
             console.warn(`Error wiping ${table}:`, error.message);
