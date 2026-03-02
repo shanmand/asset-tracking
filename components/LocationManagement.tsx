@@ -26,7 +26,7 @@ const LocationManagement: React.FC = () => {
   const { profile } = useUser();
   const isAdmin = profile?.role_name === 'System Administrator';
 
-  const [locations, setLocations] = useState<Location[]>(MOCK_LOCATIONS);
+  const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All Categories');
@@ -42,7 +42,10 @@ const LocationManagement: React.FC = () => {
   });
 
   const fetchLocations = async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setLocations(MOCK_LOCATIONS);
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -52,6 +55,7 @@ const LocationManagement: React.FC = () => {
 
       if (error) throw error;
       if (data) setLocations(data);
+      else setLocations([]);
     } catch (err: any) {
       console.error("Failed to fetch locations:", err);
     } finally {

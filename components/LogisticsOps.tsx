@@ -12,12 +12,15 @@ interface LogisticsOpsProps {
 const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
   
-  const [origin, setOrigin] = useState(MOCK_LOCATIONS[0].id);
-  const [destination, setDestination] = useState(MOCK_LOCATIONS[3].id); 
-  const [logisticsId, setLogisticsId] = useState(MOCK_LOGISTICS[0].id);
-  const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([
-    { assetId: MOCK_ASSETS[0].id, quantity: 0 }
-  ]);
+  const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
+  const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
+  const [logistics, setLogistics] = useState<LogisticsUnit[]>(isSupabaseConfigured ? [] : MOCK_LOGISTICS);
+  const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>(isSupabaseConfigured ? [] : MOCK_ASSETS);
+
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState(''); 
+  const [logisticsId, setLogisticsId] = useState('');
+  const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([]);
   const [condition, setCondition] = useState(MovementCondition.CLEAN);
   const [thaanFile, setThaanFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,7 +29,54 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAddAsset = () => !isReadOnly && setAssets([...assets, { assetId: MOCK_ASSETS[0].id, quantity: 0 }]);
+  const fetchData = async () => {
+    if (!isSupabaseConfigured) {
+      setLocations(MOCK_LOCATIONS);
+      setBatches(MOCK_BATCHES);
+      setLogistics(MOCK_LOGISTICS);
+      setAssetsMaster(MOCK_ASSETS);
+      setOrigin(MOCK_LOCATIONS[0].id);
+      setDestination(MOCK_LOCATIONS[3].id);
+      setLogisticsId(MOCK_LOGISTICS[0].id);
+      setAssets([{ assetId: MOCK_ASSETS[0].id, quantity: 0 }]);
+      return;
+    }
+
+    try {
+      const [locsRes, batchesRes, logsRes, assetsRes] = await Promise.all([
+        supabase.from('Locations').select('*'),
+        supabase.from('Batches').select('*'),
+        supabase.from('LogisticsUnits').select('*'),
+        supabase.from('AssetMaster').select('*')
+      ]);
+
+      if (locsRes.data) {
+        setLocations(locsRes.data);
+        if (locsRes.data.length > 0) {
+          setOrigin(locsRes.data[0].id);
+          if (locsRes.data.length > 3) setDestination(locsRes.data[3].id);
+          else if (locsRes.data.length > 1) setDestination(locsRes.data[1].id);
+        }
+      }
+      if (batchesRes.data) setBatches(batchesRes.data);
+      if (logsRes.data) {
+        setLogistics(logsRes.data);
+        if (logsRes.data.length > 0) setLogisticsId(logsRes.data[0].id);
+      }
+      if (assetsRes.data) {
+        setAssetsMaster(assetsRes.data);
+        if (assetsRes.data.length > 0) setAssets([{ assetId: assetsRes.data[0].id, quantity: 0 }]);
+      }
+    } catch (err) {
+      console.error("Error fetching logistics data:", err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleAddAsset = () => !isReadOnly && assetsMaster.length > 0 && setAssets([...assets, { assetId: assetsMaster[0].id, quantity: 0 }]);
   const handleRemoveAsset = (index: number) => !isReadOnly && setAssets(assets.filter((_, i) => i !== index));
   const handleAssetChange = (index: number, field: 'assetId' | 'quantity' | 'batchId', value: any) => {
     if (isReadOnly) return;
@@ -44,7 +94,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     if (assets.some(a => a.quantity <= 0)) validationErrors.push("All line items must have a quantity > 0.");
     if (origin === destination) validationErrors.push("Origin and Destination cannot be the same.");
     
-    const destType = MOCK_LOCATIONS.find(l => l.id === destination)?.type;
+    const destType = locations.find(l => l.id === destination)?.type;
     if (destType === LocationType.AT_CUSTOMER && !thaanFile) {
       validationErrors.push("Customer delivery requires a THAAN Slip upload.");
     }
@@ -62,7 +112,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           const { data: batch, error: fetchError } = await supabase
             .from('Batches')
             .select('quantity, current_location_id')
-            .eq('id', item.batchId || 'LB-BATCH-001')
+            .eq('id', item.batchId)
             .single();
 
           if (fetchError || !batch) throw new Error(`Could not find Batch ${item.batchId}`);
@@ -73,7 +123,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           const { error: moveError } = await supabase
             .from('BatchMovements')
             .insert([{
-              batch_id: item.batchId || 'LB-BATCH-001',
+              batch_id: item.batchId,
               from_location_id: origin,
               to_location_id: destination,
               logistics_id: logisticsId,
@@ -90,7 +140,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
               current_location_id: destination,
               status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success'
             })
-            .eq('id', item.batchId || 'LB-BATCH-001');
+            .eq('id', item.batchId);
 
           if (updateError) throw updateError;
         }
@@ -126,8 +176,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
       }
 
       setNotification({ message: "Manifest logged & batches updated successfully.", type: 'success' });
-      setAssets([{ assetId: MOCK_ASSETS[0].id, quantity: 0 }]);
+      if (assetsMaster.length > 0) {
+        setAssets([{ assetId: assetsMaster[0].id, quantity: 0 }]);
+      }
       setThaanFile(null);
+      fetchData(); // Refresh data
     } catch (err: any) {
       console.error("Movement capture error:", err);
       setNotification({ message: err.message || "Failed to record movement.", type: 'alert' });
@@ -137,7 +190,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     }
   };
 
-  const selectedTruck = MOCK_LOGISTICS.find(l => l.id === logisticsId);
+  const selectedTruck = logistics.find(l => l.id === logisticsId);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
@@ -181,7 +234,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     value={origin}
                     onChange={e => setOrigin(e.target.value)}
                   >
-                    {MOCK_LOCATIONS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </label>
                 <label className="block space-y-2">
@@ -194,7 +247,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     value={destination}
                     onChange={e => setDestination(e.target.value)}
                   >
-                    {MOCK_LOCATIONS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </label>
               </div>
@@ -214,7 +267,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                         onChange={e => handleAssetChange(idx, 'batchId', e.target.value)}
                       >
                         <option value="">Select Batch Ref</option>
-                        {MOCK_BATCHES.filter(b => b.current_location_id === origin).map(b => (
+                        {batches.filter(b => b.current_location_id === origin).map(b => (
                           <option key={b.id} value={b.id}>{b.id} ({b.quantity} available)</option>
                         ))}
                       </select>
@@ -245,7 +298,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                       value={logisticsId}
                       onChange={e => setLogisticsId(e.target.value)}
                     >
-                      {MOCK_LOGISTICS.map(l => <option key={l.id} value={l.id}>{l.truck_plate} - {l.driver_name}</option>)}
+                      {logistics.map(l => <option key={l.id} value={l.id}>{l.truck_plate} - {l.driver_name}</option>)}
                     </select>
                   </div>
 

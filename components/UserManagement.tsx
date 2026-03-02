@@ -28,7 +28,7 @@ const UserManagement: React.FC = () => {
   const { profile } = useUser();
   const isAdmin = profile?.role_name === UserRole.ADMIN;
 
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+  const [users, setUsers] = useState<User[]>(isSupabaseConfigured ? [] : MOCK_USERS);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All Roles');
@@ -44,7 +44,10 @@ const UserManagement: React.FC = () => {
   });
 
   const fetchUsers = async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setUsers(MOCK_USERS);
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -62,17 +65,9 @@ const UserManagement: React.FC = () => {
           branch_id: u.home_branch_name || 'Kya Sands'
         }));
         
-        // Ensure uniqueness when merging or replacing
-        setUsers(prev => {
-          const combined = [...mappedUsers];
-          const uniqueIds = new Set(combined.map(u => u.id));
-          // If we want to keep mock users that aren't in DB, we could merge.
-          // But usually fetch replaces. Let's ensure mappedUsers itself is unique.
-          const uniqueUsers = combined.filter((u, index) => 
-            combined.findIndex(user => user.id === u.id) === index
-          );
-          return uniqueUsers;
-        });
+        setUsers(mappedUsers);
+      } else {
+        setUsers([]);
       }
     } catch (err: any) {
       console.error("Failed to fetch users:", err);

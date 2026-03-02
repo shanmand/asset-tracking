@@ -38,8 +38,29 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const [issueFee, setIssueFee] = useState(145.00);
   const [replacementFee, setReplacementFee] = useState(135.00);
   
+  const [dbFees, setDbFees] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+
+  const fetchFees = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('FeeSchedule')
+        .select('*')
+        .eq('is_active', true);
+      if (error) throw error;
+      if (data) setDbFees(data);
+    } catch (err) {
+      console.error("Error fetching fees:", err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchFees();
+  }, []);
+
+  const displayFees = isSupabaseConfigured ? dbFees : MOCK_FEES;
 
   /**
    * Action: Introduce New Fee Schedule
@@ -78,6 +99,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           .insert(newFees);
 
         if (insertError) throw insertError;
+        await fetchFees();
       } else {
         // Mock success for development
         console.warn("Supabase not configured. Simulating fee update success.");
@@ -129,11 +151,13 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
     try {
       if (isSupabaseConfigured) {
         // Delete in order of dependencies if needed, or just all
-        const tables = ['users', 'locations', 'equipment', 'FeeSchedule'];
+        const tables = ['BatchMovements', 'ThaanSlips', 'Batches', 'AssetLosses', 'FeeSchedule', 'Locations', 'users'];
         for (const table of tables) {
-          const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+          // Use a filter that matches all rows. Most tables use 'id' as primary key.
+          const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
           if (error) console.warn(`Error wiping ${table}:`, error);
         }
+        await fetchFees();
         setNotification({ msg: "Database wiped successfully. System is now clean.", type: 'success' });
       } else {
         setNotification({ msg: "Supabase not connected. Mock data remains in source code but session is 'Live Mode' ready.", type: 'success' });
@@ -299,7 +323,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                 <History size={16} /> Current Active Rates
               </h4>
               <div className="space-y-4">
-                {MOCK_FEES.filter(f => f.asset_id === targetAsset && f.effective_to === null).map(f => (
+                {displayFees.filter(f => f.asset_id === targetAsset && (f.is_active || f.effective_to === null)).map(f => (
                   <div key={f.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.fee_type}</p>
@@ -308,6 +332,9 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">Active</span>
                   </div>
                 ))}
+                {displayFees.filter(f => f.asset_id === targetAsset && (f.is_active || f.effective_to === null)).length === 0 && (
+                  <p className="text-xs text-slate-400 italic text-center py-4">No active rates found for this asset.</p>
+                )}
               </div>
             </div>
           </div>

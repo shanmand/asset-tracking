@@ -52,8 +52,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   }, [branchContext]);
 
   // Merge DB data with MOCK for UI robustness
-  const displayBatches = dbBatches.length > 0 ? dbBatches : MOCK_BATCHES;
-  const displayLosses = dbLosses.length > 0 ? dbLosses : MOCK_LOSSES;
+  const displayBatches = isSupabaseConfigured ? dbBatches : MOCK_BATCHES;
+  const displayLosses = isSupabaseConfigured ? dbLosses : MOCK_LOSSES;
 
   const filteredBatches = useMemo(() => {
     if (branchContext === 'Consolidated') return displayBatches;
