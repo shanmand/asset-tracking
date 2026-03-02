@@ -233,6 +233,15 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [newUser, setNewUser] = useState({ id: '', name: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
 
+  const generateUUID = () => {
+    return crypto.randomUUID();
+  };
+
+  const handleOpenAddUser = () => {
+    setNewUser({ ...newUser, id: generateUUID() });
+    setIsAddingUser(true);
+  };
+
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
@@ -443,7 +452,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                 />
               </div>
               <button 
-                onClick={() => setIsAddingUser(!isAddingUser)}
+                onClick={() => isAddingUser ? setIsAddingUser(false) : handleOpenAddUser()}
                 disabled={!isAdmin} 
                 className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50"
               >
@@ -456,14 +465,23 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
               <form onSubmit={handleAddUser} className="p-8 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top duration-300">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">User ID (UUID/Email)</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex justify-between items-center">
+                      User ID (UUID)
+                      <button 
+                        type="button"
+                        onClick={() => setNewUser({...newUser, id: generateUUID()})}
+                        className="text-[8px] text-blue-600 hover:underline"
+                      >
+                        Regenerate
+                      </button>
+                    </label>
                     <input 
                       required
                       type="text" 
-                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg"
+                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg bg-slate-100"
                       value={newUser.id}
                       onChange={e => setNewUser({...newUser, id: e.target.value})}
-                      placeholder="e.g. user@example.com"
+                      placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000"
                     />
                   </div>
                   <div className="space-y-1">
