@@ -26,8 +26,10 @@ import {
 } from 'lucide-react';
 import { UserRole, FeeType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { useUser } from '../UserContext';
 
 const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
+  const { profile } = useUser();
   const isAdmin = currentRole === UserRole.ADMIN;
   const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
   
@@ -53,9 +55,9 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
     }
     try {
       const [feesRes, usersRes, assetsRes] = await Promise.all([
-        supabase.from('FeeSchedule').select('*').eq('is_active', true),
+        supabase.from('fee_schedule').select('*').eq('is_active', true),
         supabase.from('users').select('*'),
-        supabase.from('AssetMaster').select('*')
+        supabase.from('asset_master').select('*')
       ]);
 
       if (feesRes.data) setDbFees(feesRes.data);
@@ -97,7 +99,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
       if (isSupabaseConfigured) {
         // 1. Bulk Update: Close existing active fees for the asset
         const { error: updateError } = await supabase
-          .from('FeeSchedule')
+          .from('fee_schedule')
           .update({ is_active: false, effective_to: effectiveDate })
           .eq('asset_id', targetAsset)
           .is('effective_to', null);
@@ -112,7 +114,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         ];
 
         const { error: insertError } = await supabase
-          .from('FeeSchedule')
+          .from('fee_schedule')
           .insert(newFees);
 
         if (insertError) throw insertError;
@@ -190,28 +192,33 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
       if (isSupabaseConfigured) {
         // Delete in order of dependencies to respect foreign key constraints
         const tables = [
-          'AuditLogs',
-          'ClaimAudits',
-          'Claims',
-          'ThaanSlips',
-          'BatchMovements',
-          'AssetLosses',
-          'Batches',
-          'FeeSchedule',
-          'LogisticsUnits',
-          'Locations',
-          'AssetMaster',
+          'audit_logs',
+          'claim_audits',
+          'claims',
+          'thaan_slips',
+          'batch_movements',
+          'asset_losses',
+          'batches',
+          'fee_schedule',
+          'logistics_units',
+          'locations',
+          'asset_master',
           'users'
         ];
 
         for (const table of tables) {
           // Use a filter that matches all rows. 
-          // .neq('id', '_') is a safe way to match all string/uuid IDs that aren't a single underscore
-          const { error } = await supabase
-            .from(table)
-            .delete()
-            .neq('id', '_'); 
+          // For users table, we exclude the current user to prevent lockout
+          const query = supabase.from(table).delete();
           
+          if (table === 'users' && profile?.id) {
+            query.neq('id', profile.id);
+          } else {
+            // Dummy filter to allow delete on all rows
+            query.neq('id', '_');
+          }
+          
+          const { error } = await query;
           if (error) {
             console.warn(`Error wiping ${table}:`, error.message);
           }
@@ -251,9 +258,9 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         .from('users')
         .insert([{ 
           id: newUser.id, 
-          name: newUser.name, 
+          full_name: newUser.name, 
           role_name: newUser.role, 
-          branch_id: newUser.branch_id 
+          home_branch_name: newUser.branch_id 
         }]);
       
       if (error) throw error;

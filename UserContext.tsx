@@ -34,7 +34,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           id, 
           full_name, 
           home_branch_name,
-          user_roles (role_name)
+          role_name
         `)
         .eq('id', userId)
         .single();
@@ -44,7 +44,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const profileData: UserProfile = {
         id: data.id,
         full_name: data.full_name,
-        role_name: (data.user_roles as any)?.role_name || UserRole.ADMIN,
+        role_name: data.role_name as UserRole || UserRole.ADMIN,
         home_branch_name: data.home_branch_name || 'Kya Sands',
         email: user?.email || '',
       };

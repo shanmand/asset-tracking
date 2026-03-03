@@ -141,9 +141,18 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 4. AUTH SYNC TRIGGER
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
+DECLARE
+  user_count int;
 BEGIN
+  SELECT count(*) INTO user_count FROM public.users;
+  
   INSERT INTO public.users (id, full_name, role_name, home_branch_name)
-  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'role_name', NEW.raw_user_meta_data->>'home_branch_name');
+  VALUES (
+    NEW.id, 
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email), 
+    COALESCE(NEW.raw_user_meta_data->>'role_name', CASE WHEN user_count = 0 THEN 'System Administrator' ELSE 'Staff' END), 
+    COALESCE(NEW.raw_user_meta_data->>'home_branch_name', 'Kya Sands')
+  );
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -153,12 +162,83 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
 -- 5. ROW LEVEL SECURITY (RLS)
+-- Enable RLS for all tables
+ALTER TABLE public.asset_master ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.logistics_units ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_schedule ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.batch_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.thaan_slips ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.asset_losses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.claim_audits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Admins have full access" ON public.users FOR ALL TO authenticated USING (auth.uid() IN (SELECT id FROM public.users WHERE role_name = 'System Administrator'));
-CREATE POLICY "Users can view all batches" ON public.batches FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Staff can insert movements" ON public.batch_movements FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Executives are read-only" ON public.asset_losses FOR SELECT TO authenticated USING (true);
+-- Helper function to check if user is admin
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid() AND role_name = 'System Administrator'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Policies for asset_master
+CREATE POLICY "Allow authenticated select on asset_master" ON public.asset_master FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on asset_master" ON public.asset_master FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for locations
+CREATE POLICY "Allow authenticated select on locations" ON public.locations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on locations" ON public.locations FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for logistics_units
+CREATE POLICY "Allow authenticated select on logistics_units" ON public.logistics_units FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on logistics_units" ON public.logistics_units FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for users
+CREATE POLICY "Allow authenticated select on users" ON public.users FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on users" ON public.users FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for fee_schedule
+CREATE POLICY "Allow authenticated select on fee_schedule" ON public.fee_schedule FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on fee_schedule" ON public.fee_schedule FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for batches
+CREATE POLICY "Allow authenticated select on batches" ON public.batches FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert batches" ON public.batches FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow staff to update batches" ON public.batches FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on batches" ON public.batches FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for batch_movements
+CREATE POLICY "Allow authenticated select on batch_movements" ON public.batch_movements FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert movements" ON public.batch_movements FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow admins full access on batch_movements" ON public.batch_movements FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for thaan_slips
+CREATE POLICY "Allow authenticated select on thaan_slips" ON public.thaan_slips FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert thaan_slips" ON public.thaan_slips FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow admins full access on thaan_slips" ON public.thaan_slips FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for asset_losses
+CREATE POLICY "Allow authenticated select on asset_losses" ON public.asset_losses FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert losses" ON public.asset_losses FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow admins full access on asset_losses" ON public.asset_losses FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for claims
+CREATE POLICY "Allow authenticated select on claims" ON public.claims FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert/update claims" ON public.claims FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow admins full access on claims" ON public.claims FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for claim_audits
+CREATE POLICY "Allow authenticated select on claim_audits" ON public.claim_audits FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert claim_audits" ON public.claim_audits FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow admins full access on claim_audits" ON public.claim_audits FOR ALL TO authenticated USING (public.is_admin());
+
+-- Policies for audit_logs
+CREATE POLICY "Allow authenticated select on audit_logs" ON public.audit_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow staff to insert audit_logs" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow admins full access on audit_logs" ON public.audit_logs FOR ALL TO authenticated USING (public.is_admin());
