@@ -7,7 +7,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. TABLES
-CREATE TABLE public.AssetMaster (
+CREATE TABLE public.asset_master (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL, -- Crate, Pallet
@@ -16,7 +16,7 @@ CREATE TABLE public.AssetMaster (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.Locations (
+CREATE TABLE public.locations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL, -- Warehouse, At Customer, etc.
@@ -24,7 +24,7 @@ CREATE TABLE public.Locations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.LogisticsUnits (
+CREATE TABLE public.logistics_units (
     id TEXT PRIMARY KEY,
     truck_plate TEXT NOT NULL,
     driver_name TEXT NOT NULL,
@@ -39,9 +39,9 @@ CREATE TABLE public.users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.FeeSchedule (
+CREATE TABLE public.fee_schedule (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    asset_id TEXT REFERENCES public.AssetMaster(id),
+    asset_id TEXT REFERENCES public.asset_master(id),
     fee_type TEXT NOT NULL,
     amount_zar NUMERIC(12, 2) NOT NULL,
     effective_from DATE NOT NULL,
@@ -50,41 +50,41 @@ CREATE TABLE public.FeeSchedule (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.Batches (
+CREATE TABLE public.batches (
     id TEXT PRIMARY KEY,
-    asset_id TEXT REFERENCES public.AssetMaster(id),
+    asset_id TEXT REFERENCES public.asset_master(id),
     quantity INTEGER NOT NULL CHECK (quantity > 0),
-    current_location_id TEXT REFERENCES public.Locations(id),
+    current_location_id TEXT REFERENCES public.locations(id),
     status TEXT DEFAULT 'Pending', -- Pending, Success, Lost, In-Transit
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.BatchMovements (
+CREATE TABLE public.batch_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    batch_id TEXT REFERENCES public.Batches(id),
-    from_location_id TEXT REFERENCES public.Locations(id),
-    to_location_id TEXT REFERENCES public.Locations(id),
-    logistics_id TEXT REFERENCES public.LogisticsUnits(id),
+    batch_id TEXT REFERENCES public.batches(id),
+    from_location_id TEXT REFERENCES public.locations(id),
+    to_location_id TEXT REFERENCES public.locations(id),
+    logistics_id TEXT REFERENCES public.logistics_units(id),
     condition TEXT DEFAULT 'Clean',
     origin_user_id UUID REFERENCES public.users(id),
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.ThaanSlips (
+CREATE TABLE public.thaan_slips (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    batch_id TEXT REFERENCES public.Batches(id),
+    batch_id TEXT REFERENCES public.batches(id),
     doc_url TEXT NOT NULL,
     is_signed BOOLEAN DEFAULT FALSE,
     signed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.AssetLosses (
+CREATE TABLE public.asset_losses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    batch_id TEXT REFERENCES public.Batches(id),
+    batch_id TEXT REFERENCES public.batches(id),
     loss_type TEXT NOT NULL,
     lost_quantity INTEGER NOT NULL,
-    last_known_location_id TEXT REFERENCES public.Locations(id),
+    last_known_location_id TEXT REFERENCES public.locations(id),
     reported_by UUID REFERENCES public.users(id),
     notes TEXT,
     is_rechargeable BOOLEAN DEFAULT FALSE,
@@ -92,11 +92,11 @@ CREATE TABLE public.AssetLosses (
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.Claims (
+CREATE TABLE public.claims (
     id TEXT PRIMARY KEY,
-    batch_id TEXT REFERENCES public.Batches(id),
-    driver_id TEXT REFERENCES public.LogisticsUnits(id),
-    thaan_slip_id UUID REFERENCES public.ThaanSlips(id),
+    batch_id TEXT REFERENCES public.batches(id),
+    driver_id TEXT REFERENCES public.logistics_units(id),
+    thaan_slip_id UUID REFERENCES public.thaan_slips(id),
     type TEXT NOT NULL, -- Damaged, Dirty
     amount_claimed_zar NUMERIC(12, 2),
     status TEXT DEFAULT 'Lodged',
@@ -120,10 +120,10 @@ BEGIN
                 COALESCE(al.timestamp, ts.signed_at, NOW()), 
                 COALESCE(fs.effective_to::timestamp, '9999-12-31'::timestamp)
             ) as phase_end
-        FROM public.Batches b
-        JOIN public.FeeSchedule fs ON b.asset_id = fs.asset_id
-        LEFT JOIN public.AssetLosses al ON b.id = al.batch_id
-        LEFT JOIN public.ThaanSlips ts ON b.id = ts.batch_id
+        FROM public.batches b
+        JOIN public.fee_schedule fs ON b.asset_id = fs.asset_id
+        LEFT JOIN public.asset_losses al ON b.id = al.batch_id
+        LEFT JOIN public.thaan_slips ts ON b.id = ts.batch_id
         WHERE b.id = batch_id_input
           AND fs.fee_type = 'Daily Rental (Supermarket)'
     )
@@ -154,11 +154,11 @@ CREATE TRIGGER on_auth_user_created
 
 -- 5. ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.Batches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.BatchMovements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.AssetLosses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batch_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.asset_losses ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Admins have full access" ON public.users FOR ALL TO authenticated USING (auth.uid() IN (SELECT id FROM public.users WHERE role_name = 'System Administrator'));
-CREATE POLICY "Users can view all batches" ON public.Batches FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Staff can insert movements" ON public.BatchMovements FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Executives are read-only" ON public.AssetLosses FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Users can view all batches" ON public.batches FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Staff can insert movements" ON public.batch_movements FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Executives are read-only" ON public.asset_losses FOR SELECT TO authenticated USING (true);

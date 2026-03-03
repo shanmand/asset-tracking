@@ -26,10 +26,10 @@ const InventoryDashboard: React.FC = () => {
       setIsLoading(true);
       try {
         const [locsRes, batchesRes, assetsRes, feesRes] = await Promise.all([
-          supabase.from('Locations').select('*'),
-          supabase.from('Batches').select('*'),
-          supabase.from('AssetMaster').select('*'),
-          supabase.from('FeeSchedule').select('*')
+          supabase.from('locations').select('*'),
+          supabase.from('batches').select('*'),
+          supabase.from('asset_master').select('*'),
+          supabase.from('fee_schedule').select('*')
         ]);
 
         if (locsRes.data) setLocations(locsRes.data);

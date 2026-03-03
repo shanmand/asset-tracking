@@ -35,8 +35,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
       setIsLoading(true);
       try {
-        // 1. Fetch movement_batches (Batches) with branch filter
-        let batchQuery = supabase.from('Batches').select('*');
+        // 1. Fetch movement_batches (batches) with branch filter
+        let batchQuery = supabase.from('batches').select('*');
         
         if (branchContext !== 'Consolidated') {
           const branchMapping = {
@@ -49,11 +49,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         
         const [batchesRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes] = await Promise.all([
           batchQuery,
-          supabase.from('AssetLosses').select('*'),
-          supabase.from('Locations').select('*'),
+          supabase.from('asset_losses').select('*'),
+          supabase.from('locations').select('*'),
           supabase.from('users').select('*'),
-          supabase.from('AssetMaster').select('*'),
-          supabase.from('Claims').select('*')
+          supabase.from('asset_master').select('*'),
+          supabase.from('claims').select('*')
         ]);
 
         if (batchesRes.data) setDbBatches(batchesRes.data);

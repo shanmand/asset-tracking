@@ -38,10 +38,10 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
       setIsLoading(true);
       try {
         const [bRes, mRes, lRes, aRes, uRes] = await Promise.all([
-          supabase.from('Batches').select('*'),
-          supabase.from('BatchMovements').select('*'),
-          supabase.from('LogisticsUnits').select('*'),
-          supabase.from('AssetMaster').select('*'),
+          supabase.from('batches').select('*'),
+          supabase.from('batch_movements').select('*'),
+          supabase.from('logistics_units').select('*'),
+          supabase.from('asset_master').select('*'),
           supabase.from('users').select('*')
         ]);
 
@@ -88,7 +88,7 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
       if (isSupabaseConfigured) {
         // Update batch status and quantity if needed
         const { error: updateError } = await supabase
-          .from('Batches')
+          .from('batches')
           .update({ 
             status: 'Success',
             quantity: receivedQty // Update to physical count
@@ -99,7 +99,7 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
 
         // Log audit if variance
         if (variance !== 0) {
-          await supabase.from('AuditLogs').insert([{
+          await supabase.from('audit_logs').insert([{
             user_id: currentUser.id,
             action: 'QUANTITY_VARIANCE_REPORTED',
             entity_type: 'Batch',
@@ -118,7 +118,7 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
       
       // Refresh data
       if (isSupabaseConfigured) {
-        const { data: bRes } = await supabase.from('Batches').select('*');
+        const { data: bRes } = await supabase.from('batches').select('*');
         if (bRes) setBatches(bRes);
       }
     } catch (err) {

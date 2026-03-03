@@ -43,10 +43,10 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     setIsLoading(true);
     try {
       const [locsRes, batchesRes, logsRes, assetsRes] = await Promise.all([
-        supabase.from('Locations').select('*'),
-        supabase.from('Batches').select('*'),
-        supabase.from('LogisticsUnits').select('*'),
-        supabase.from('AssetMaster').select('*')
+        supabase.from('locations').select('*'),
+        supabase.from('batches').select('*'),
+        supabase.from('logistics_units').select('*'),
+        supabase.from('asset_master').select('*')
       ]);
 
       if (locsRes.data) {
@@ -111,7 +111,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
       if (isSupabaseConfigured) {
         for (const item of assets) {
           const { data: batch, error: fetchError } = await supabase
-            .from('Batches')
+            .from('batches')
             .select('quantity, current_location_id')
             .eq('id', item.batchId)
             .single();
@@ -122,7 +122,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           }
 
           const { error: moveError } = await supabase
-            .from('BatchMovements')
+            .from('batch_movements')
             .insert([{
               batch_id: item.batchId,
               from_location_id: origin,
@@ -136,7 +136,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           if (moveError) throw moveError;
 
           const { error: updateError } = await supabase
-            .from('Batches')
+            .from('batches')
             .update({ 
               current_location_id: destination,
               status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success'
@@ -162,7 +162,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
             .getPublicUrl(filePath);
 
           await supabase
-            .from('ThaanSlips')
+            .from('thaan_slips')
             .insert([{
               batch_id: assets[0].batchId,
               doc_url: publicUrlData.publicUrl,

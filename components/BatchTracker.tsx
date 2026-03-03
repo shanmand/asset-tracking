@@ -36,13 +36,13 @@ const BatchTracker: React.FC = () => {
     setIsLoading(true);
     try {
       const [batchesRes, thaansRes, movesRes, locsRes, logsRes, feesRes, assetsRes] = await Promise.all([
-        supabase.from('Batches').select('*'),
-        supabase.from('ThaanSlips').select('*'),
-        supabase.from('BatchMovements').select('*'),
-        supabase.from('Locations').select('*'),
-        supabase.from('LogisticsUnits').select('*'),
-        supabase.from('FeeSchedule').select('*'),
-        supabase.from('AssetMaster').select('*')
+        supabase.from('batches').select('*'),
+        supabase.from('thaan_slips').select('*'),
+        supabase.from('batch_movements').select('*'),
+        supabase.from('locations').select('*'),
+        supabase.from('logistics_units').select('*'),
+        supabase.from('fee_schedule').select('*'),
+        supabase.from('asset_master').select('*')
       ]);
 
       if (batchesRes.data) {
@@ -96,7 +96,7 @@ const BatchTracker: React.FC = () => {
         .getPublicUrl(filePath);
 
       const { data: newThaanRecord, error: dbError } = await supabase
-        .from('ThaanSlips')
+        .from('thaan_slips')
         .insert([{
           batch_id: selectedBatchId,
           doc_url: publicUrl,

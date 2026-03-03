@@ -68,14 +68,14 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
       setIsLoading(true);
       try {
         const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes] = await Promise.all([
-          supabase.from('Batches').select('*'),
-          supabase.from('FeeSchedule').select('*'),
-          supabase.from('AssetLosses').select('*'),
-          supabase.from('Claims').select('*'),
-          supabase.from('AssetMaster').select('*'),
-          supabase.from('Locations').select('*'),
-          supabase.from('BatchMovements').select('*'),
-          supabase.from('ThaanSlips').select('*')
+          supabase.from('batches').select('*'),
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('asset_losses').select('*'),
+          supabase.from('claims').select('*'),
+          supabase.from('asset_master').select('*'),
+          supabase.from('locations').select('*'),
+          supabase.from('batch_movements').select('*'),
+          supabase.from('thaan_slips').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);

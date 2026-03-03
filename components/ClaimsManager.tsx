@@ -31,10 +31,10 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
       setIsLoading(true);
       try {
         const [cRes, bRes, aRes, lRes] = await Promise.all([
-          supabase.from('Claims').select('*'),
-          supabase.from('Batches').select('*'),
-          supabase.from('ClaimAudits').select('*'),
-          supabase.from('LogisticsUnits').select('*')
+          supabase.from('claims').select('*'),
+          supabase.from('batches').select('*'),
+          supabase.from('claim_audits').select('*'),
+          supabase.from('logistics_units').select('*')
         ]);
 
         if (cRes.data) {

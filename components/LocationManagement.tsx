@@ -50,7 +50,7 @@ const LocationManagement: React.FC = () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('Locations')
+        .from('locations')
         .select('*');
 
       if (error) throw error;
@@ -87,7 +87,7 @@ const LocationManagement: React.FC = () => {
     try {
       if (isSupabaseConfigured) {
         const { error } = await supabase
-          .from('Locations')
+          .from('locations')
           .insert([newLoc]);
         
         if (error) throw error;

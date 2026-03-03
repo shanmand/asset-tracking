@@ -21,7 +21,7 @@ const AuditView: React.FC = () => {
       setIsLoading(true);
       try {
         const [logsRes, usersRes] = await Promise.all([
-          supabase.from('AuditLogs').select('*').order('timestamp', { ascending: false }),
+          supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }),
           supabase.from('users').select('*')
         ]);
 

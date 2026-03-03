@@ -1,14 +1,54 @@
 
-import React from 'react';
-import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_FEES, MOCK_ASSETS } from '../constants';
-// Added Search to the import list from lucide-react
-import { Award, TrendingDown, Clock, ShieldAlert, User, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search } from 'lucide-react';
-import { LocationType } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Award, TrendingDown, Clock, ShieldAlert, User, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
+import { LocationType, Batch, BatchMovement, Location, LogisticsUnit, FeeSchedule, AssetMaster } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 const ExecutiveReport: React.FC = () => {
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [movements, setMovements] = useState<BatchMovement[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [bRes, mRes, lRes, logRes, fRes, aRes] = await Promise.all([
+          supabase.from('batches').select('*'),
+          supabase.from('batch_movements').select('*'),
+          supabase.from('locations').select('*'),
+          supabase.from('logistics_units').select('*'),
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('asset_master').select('*')
+        ]);
+
+        if (bRes.data) setBatches(bRes.data);
+        if (mRes.data) setMovements(mRes.data);
+        if (lRes.data) setLocations(lRes.data);
+        if (logRes.data) setLogistics(logRes.data);
+        if (fRes.data) setFees(fRes.data);
+        if (aRes.data) setAssets(aRes.data);
+      } catch (err) {
+        console.error("Executive Report Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   // Aggregate Branch Data
-  // In a real scenario, this would come from vw_executive_performance_audit
-  const branches = [
+  const branchList = [
     { id: 'B1', name: 'Kya Sands (JHB)', totalManaged: 5000, color: 'emerald' },
     { id: 'B2', name: 'Durban Plant', totalManaged: 3200, color: 'blue' },
     { id: 'B3', name: 'Cape Town Depot', totalManaged: 2800, color: 'amber' },
@@ -16,38 +56,37 @@ const ExecutiveReport: React.FC = () => {
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const branchPerformance = branches.map(branch => {
+  const branchPerformance = branchList.map(branch => {
     // Stagnant Inventory (> 14 days no movement)
-    // For mock, filter batches where created_at is old and last movement is old
-    const stagnantBatches = MOCK_BATCHES.filter(b => {
+    const stagnantBatches = batches.filter(b => {
       const ageDays = (Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60 * 24);
       return ageDays > 14; 
     });
 
-    // Loss Ratio (Mocked per branch)
+    // Loss Ratio (Mocked per branch as we don't have a direct link in loss table yet)
     const lossQty = branch.id === 'B1' ? 45 : (branch.id === 'B2' ? 120 : 15);
     const lossRatio = (lossQty / branch.totalManaged) * 100;
 
     // Financial Drain (> 21 days in Warehouse/Cold Storage)
-    const drainBatches = MOCK_BATCHES.filter(b => {
-      const loc = MOCK_LOCATIONS.find(l => l.id === b.current_location_id);
+    const drainBatches = batches.filter(b => {
+      const loc = locations.find(l => l.id === b.current_location_id);
       const isStorage = loc?.type === LocationType.WAREHOUSE || loc?.type === LocationType.COLD_STORAGE;
       const ageDays = (Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60 * 24);
       return isStorage && ageDays > 21;
     });
 
     const drainValue = drainBatches.reduce((total, b) => {
-      const fee = MOCK_FEES.find(f => f.asset_id === b.asset_id && f.effective_to === null);
+      const fee = fees.find(f => f.asset_id === b.asset_id && f.effective_to === null);
       const ageDays = (Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60 * 24);
       return total + (b.quantity * (fee?.amount_zar || 0) * ageDays);
     }, 0);
 
     // Forensics: Last known driver for the oldest stagnant item
     const oldestStagnant = stagnantBatches[0];
-    const lastMovement = MOCK_MOVEMENTS.filter(m => m.batch_id === oldestStagnant?.id).sort((a,b) => b.timestamp.localeCompare(a.timestamp))[0];
+    const lastMovement = movements.filter(m => m.batch_id === oldestStagnant?.id).sort((a,b) => b.timestamp.localeCompare(a.timestamp))[0];
     const forensics = {
-      driver: MOCK_LOGISTICS.find(l => l.id === lastMovement?.logistics_id)?.driver_name || 'System',
-      location: MOCK_LOCATIONS.find(l => l.id === oldestStagnant?.current_location_id)?.name || 'Unknown'
+      driver: logistics.find(l => l.id === lastMovement?.logistics_id)?.driver_name || 'System',
+      location: locations.find(l => l.id === oldestStagnant?.current_location_id)?.name || 'Unknown'
     };
 
     return {
@@ -58,6 +97,14 @@ const ExecutiveReport: React.FC = () => {
       forensics
     };
   }).sort((a, b) => (b.drainValue + b.stagnantCount * 100) - (a.drainValue + a.stagnantCount * 100)); // Rank by financial impact
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-12">

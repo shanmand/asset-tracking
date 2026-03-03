@@ -68,12 +68,12 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
       setIsLoading(true);
       try {
         const [bRes, lRes, fRes, tRes, aRes, lossRes] = await Promise.all([
-          supabase.from('Batches').select('*'),
-          supabase.from('Locations').select('*'),
-          supabase.from('FeeSchedule').select('*'),
-          supabase.from('ThaanSlips').select('*'),
-          supabase.from('AssetMaster').select('*'),
-          supabase.from('AssetLosses').select('*')
+          supabase.from('batches').select('*'),
+          supabase.from('locations').select('*'),
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('thaan_slips').select('*'),
+          supabase.from('asset_master').select('*'),
+          supabase.from('asset_losses').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);

@@ -55,12 +55,12 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
       setIsLoading(true);
       try {
         const [bRes, mRes, lRes, logRes, tRes, aRes, uRes] = await Promise.all([
-          supabase.from('Batches').select('*'),
-          supabase.from('BatchMovements').select('*'),
-          supabase.from('Locations').select('*'),
-          supabase.from('LogisticsUnits').select('*'),
-          supabase.from('ThaanSlips').select('*'),
-          supabase.from('AssetMaster').select('*'),
+          supabase.from('batches').select('*'),
+          supabase.from('batch_movements').select('*'),
+          supabase.from('locations').select('*'),
+          supabase.from('logistics_units').select('*'),
+          supabase.from('thaan_slips').select('*'),
+          supabase.from('asset_master').select('*'),
           supabase.from('users').select('*')
         ]);
 
@@ -125,7 +125,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     setIsProcessing(true);
     try {
       if (isSupabaseConfigured) {
-        const { error } = await supabase.from('AssetLosses').insert([{
+        const { error } = await supabase.from('asset_losses').insert([{
           batch_id: selectedBatchId,
           lost_quantity: lostQty,
           loss_type: lossType,
@@ -139,7 +139,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         // Update batch status to Lost if fully lost
         const batch = batches.find(b => b.id === selectedBatchId);
         if (batch && lostQty >= batch.quantity) {
-          await supabase.from('Batches').update({ status: 'Lost' }).eq('id', selectedBatchId);
+          await supabase.from('batches').update({ status: 'Lost' }).eq('id', selectedBatchId);
         }
       }
 

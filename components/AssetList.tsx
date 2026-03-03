@@ -27,8 +27,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
       setIsLoading(true);
       try {
         const [assetsRes, feesRes] = await Promise.all([
-          supabase.from('AssetMaster').select('*'),
-          supabase.from('FeeSchedule').select('*')
+          supabase.from('asset_master').select('*'),
+          supabase.from('fee_schedule').select('*')
         ]);
 
         if (assetsRes.data) setAssets(assetsRes.data);

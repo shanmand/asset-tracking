@@ -1,7 +1,6 @@
 
-import React, { useState } from 'react';
-import { MOCK_LOSSES, MOCK_FEES, MOCK_BATCHES, MOCK_ASSETS, MOCK_LOCATIONS } from '../constants';
-import { AssetLoss, FeeType, LossType } from '../types';
+import React, { useState, useEffect } from 'react';
+import { AssetLoss, FeeType, LossType, Batch, FeeSchedule, AssetMaster, Location } from '../types';
 import { 
   HandCoins, 
   Bell, 
@@ -17,16 +16,55 @@ import {
   Printer,
   ChevronDown,
   CreditCard,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 const SupplierRecon: React.FC = () => {
-  const [losses, setLosses] = useState<AssetLoss[]>(MOCK_LOSSES);
+  const [losses, setLosses] = useState<AssetLoss[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [filter, setFilter] = useState<'all' | 'notified' | 'unbilled'>('all');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isSupabaseConfigured) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const [lossRes, batchRes, feeRes, assetRes, locRes] = await Promise.all([
+          supabase.from('asset_losses').select('*'),
+          supabase.from('batches').select('*'),
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('asset_master').select('*'),
+          supabase.from('locations').select('*')
+        ]);
+
+        if (lossRes.data) setLosses(lossRes.data);
+        if (batchRes.data) setBatches(batchRes.data);
+        if (feeRes.data) setFees(feeRes.data);
+        if (assetRes.data) setAssets(assetRes.data);
+        if (locRes.data) setLocations(locRes.data);
+      } catch (err) {
+        console.error("Supplier Recon Fetch Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // Helper: Find replacement fee for asset at time of loss
   const getReplacementFee = (assetId: string, timestamp: string) => {
-    return MOCK_FEES.find(f => 
+    return fees.find(f => 
       f.asset_id === assetId && 
       f.fee_type === FeeType.REPLACEMENT_FEE &&
       new Date(timestamp) >= new Date(f.effective_from) &&
@@ -34,14 +72,23 @@ const SupplierRecon: React.FC = () => {
     );
   };
 
-  const handleToggleNotification = (id: string) => {
+  const handleToggleNotification = async (id: string) => {
+    const loss = losses.find(l => l.id === id);
+    if (!loss) return;
+
+    const newValue = !loss.supplier_notified;
+    
     setLosses(prev => prev.map(l => 
-      l.id === id ? { ...l, supplier_notified: !l.supplier_notified } : l
+      l.id === id ? { ...l, supplier_notified: newValue } : l
     ));
+
+    if (isSupabaseConfigured) {
+      await supabase.from('asset_losses').update({ supplier_notified: newValue }).eq('id', id);
+    }
   };
 
   const calculateSettlement = (loss: AssetLoss) => {
-    const batch = MOCK_BATCHES.find(b => b.id === loss.batch_id);
+    const batch = batches.find(b => b.id === loss.batch_id);
     const fee = getReplacementFee(batch?.asset_id || '', loss.timestamp);
     const baseAmount = loss.lost_quantity * (fee?.amount_zar || 0);
     
@@ -65,6 +112,14 @@ const SupplierRecon: React.FC = () => {
 
   const totalRechargeableValue = losses.filter(l => l.is_rechargeable).reduce((acc, l) => acc + calculateSettlement(l), 0);
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-20">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -72,7 +127,6 @@ const SupplierRecon: React.FC = () => {
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Unbilled Settlement Exposure</p>
           <p className="text-3xl font-bold">R {formatCurrency(totalUnbilledLossValue)}</p>
           <div className="flex items-center gap-1 text-[10px] text-amber-400 font-bold mt-2 uppercase">
-            {/* Fixed typo: changed size(12) to size={12} */}
             <AlertTriangle size={12} /> After Scrapped/Salvage Credits
           </div>
         </div>
@@ -120,11 +174,11 @@ const SupplierRecon: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredLosses.map(loss => {
-                const batch = MOCK_BATCHES.find(b => b.id === loss.batch_id);
-                const asset = MOCK_ASSETS.find(a => a.id === batch?.asset_id);
+                const batch = batches.find(b => b.id === loss.batch_id);
+                const asset = assets.find(a => a.id === batch?.asset_id);
                 const fee = getReplacementFee(asset?.id || '', loss.timestamp);
                 const settlement = calculateSettlement(loss);
-                const location = MOCK_LOCATIONS.find(l => l.id === loss.last_known_location_id);
+                const location = locations.find(l => l.id === loss.last_known_location_id);
 
                 return (
                   <tr key={loss.id} className="hover:bg-slate-50/50 transition-colors group">
