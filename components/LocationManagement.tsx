@@ -18,13 +18,13 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { MOCK_LOCATIONS } from '../constants';
-import { LocationType, LocationCategory, Location } from '../types';
+import { LocationType, LocationCategory, Location, UserRole } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
 
 const LocationManagement: React.FC = () => {
   const { profile } = useUser();
-  const isAdmin = profile?.role_name === 'System Administrator';
+  const isAdmin = profile?.role_name === UserRole.ADMIN;
 
   const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
   const [isLoading, setIsLoading] = useState(false);

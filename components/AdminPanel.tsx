@@ -29,7 +29,7 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
 
 const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
-  const { profile, user } = useUser();
+  const { profile, user, refreshProfile } = useUser();
   const isAdmin = currentRole === UserRole.ADMIN;
   const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
 
@@ -78,6 +78,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         setNotification({ msg: "System Bootstrapped: You are now a System Administrator", type: 'success' });
       }
       
+      await refreshProfile();
       await fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Bootstrap failed", type: 'error' });
@@ -265,8 +266,8 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           // For users table, we exclude the current user to prevent lockout
           const query = supabase.from(table).delete();
           
-          if (table === 'users' && profile?.id) {
-            query.neq('id', profile.id);
+          if (table === 'users' && user?.id) {
+            query.neq('id', user.id);
           } else {
             // Dummy filter to allow delete on all rows
             query.neq('id', '_');

@@ -25,7 +25,7 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
 
 const UserManagement: React.FC = () => {
-  const { profile } = useUser();
+  const { profile, refreshProfile } = useUser();
   const isAdmin = profile?.role_name === UserRole.ADMIN;
 
   const [users, setUsers] = useState<User[]>(isSupabaseConfigured ? [] : MOCK_USERS);
@@ -123,6 +123,9 @@ const UserManagement: React.FC = () => {
 
       // Update local state
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      if (userId === profile?.id) {
+        await refreshProfile();
+      }
       setNotification({ msg: `Role updated successfully`, type: 'success' });
     } catch (err: any) {
       setNotification({ msg: "Failed to update role", type: 'error' });

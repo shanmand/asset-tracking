@@ -16,6 +16,7 @@ interface UserContextType {
   profile: UserProfile | null;
   isLoading: boolean;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
 }
 
@@ -25,6 +26,12 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshProfile = async () => {
+    if (user?.id) {
+      await fetchProfile(user.id);
+    }
+  };
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -125,7 +132,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <UserContext.Provider value={{ user, profile, isLoading, logout, hasPermission }}>
+    <UserContext.Provider value={{ user, profile, isLoading, logout, refreshProfile, hasPermission }}>
       {children}
     </UserContext.Provider>
   );

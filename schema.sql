@@ -203,25 +203,32 @@ CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 DECLARE
   user_count int;
+  current_user_role text;
 BEGIN
+  -- Get the count of users
   SELECT count(*) INTO user_count FROM public.users;
   
-  -- Bootstrap: If no users exist, allow the action (the first user will be created as admin)
+  -- Bootstrap: If no users exist, allow the action
   IF user_count = 0 THEN
     RETURN TRUE;
   END IF;
 
-  -- Also allow if the current user is the ONLY user (in case they lost admin role during setup)
+  -- Get the role of the current authenticated user
+  SELECT role_name INTO current_user_role FROM public.users WHERE id = auth.uid();
+
+  -- If the user is in the table as an admin, allow
+  IF current_user_role = 'System Administrator' THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Also allow if the current user is the ONLY user (emergency recovery)
   IF user_count = 1 AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid()) THEN
     RETURN TRUE;
   END IF;
 
-  RETURN EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid() AND role_name = 'System Administrator'
-  );
+  RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Policies for asset_master
 CREATE POLICY "Allow authenticated select on asset_master" ON public.asset_master FOR SELECT TO authenticated USING (true);
@@ -236,8 +243,20 @@ CREATE POLICY "Allow authenticated select on logistics_units" ON public.logistic
 CREATE POLICY "Allow admins full access on logistics_units" ON public.logistics_units FOR ALL TO authenticated USING (public.is_admin());
 
 -- Policies for users
-CREATE POLICY "Allow authenticated select on users" ON public.users FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on users" ON public.users FOR ALL TO authenticated USING (public.is_admin());
+DROP POLICY IF EXISTS "Allow authenticated select on users" ON public.users;
+DROP POLICY IF EXISTS "Allow admins full access on users" ON public.users;
+
+CREATE POLICY "Allow authenticated select on users" ON public.users 
+    FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow users to insert their own profile" ON public.users 
+    FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Allow users to update their own profile" ON public.users 
+    FOR UPDATE TO authenticated USING (auth.uid() = id);
+
+CREATE POLICY "Allow admins full access on users" ON public.users 
+    FOR ALL TO authenticated USING (public.is_admin());
 
 -- Policies for fee_schedule
 CREATE POLICY "Allow authenticated select on fee_schedule" ON public.fee_schedule FOR SELECT TO authenticated USING (true);
