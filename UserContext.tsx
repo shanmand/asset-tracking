@@ -8,7 +8,7 @@ interface UserProfile {
   full_name: string;
   role_name: UserRole;
   home_branch_name: string;
-  email: string;
+  email?: string;
 }
 
 interface UserContextType {
@@ -28,17 +28,28 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      let data: any;
+      let error: any;
+
+      const firstTry = await supabase
         .from('users')
-        .select(`
-          id, 
-          full_name, 
-          email,
-          home_branch_name,
-          role_name
-        `)
+        .select(`id, full_name, email, home_branch_name, role_name`)
         .eq('id', userId)
         .single();
+      
+      data = firstTry.data;
+      error = firstTry.error;
+
+      if (error && error.message.includes('column "email" does not exist')) {
+        // Fallback for legacy schema
+        const retry = await supabase
+          .from('users')
+          .select(`id, full_name, home_branch_name, role_name`)
+          .eq('id', userId)
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
 

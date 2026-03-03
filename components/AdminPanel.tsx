@@ -34,26 +34,56 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
 
   const handleBootstrapAdmin = async () => {
-    if (!user) return;
+    if (!user) {
+      setNotification({ msg: "Authentication Required: Please sign in via Supabase to claim the administrator role.", type: 'error' });
+      setTimeout(() => setNotification(null), 5000);
+      return;
+    }
     setIsSubmitting(true);
     try {
+      const payload: any = {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.email,
+        role_name: UserRole.ADMIN,
+        home_branch_name: 'Kya Sands'
+      };
+
+      // Only add email if it's available in the user object
+      if (user.email) {
+        payload.email = user.email;
+      }
+
       const { error } = await supabase
         .from('users')
-        .insert([{
-          id: user.id,
-          full_name: user.user_metadata?.full_name || user.email,
-          email: user.email,
-          role_name: UserRole.ADMIN,
-          home_branch_name: 'Kya Sands'
-        }]);
-      if (error) throw error;
+        .insert([payload]);
+
+      if (error) {
+        if (error.message.includes('column "email" of relation "users" does not exist')) {
+          // Fallback: try without email if column is missing
+          const { id, full_name, role_name, home_branch_name } = payload;
+          const { error: retryError } = await supabase
+            .from('users')
+            .insert([{ id, full_name, role_name, home_branch_name }]);
+          
+          if (retryError) throw retryError;
+          
+          setNotification({ 
+            msg: "System Bootstrapped (Legacy Schema): You are now Admin. Please update your database schema to include the 'email' column.", 
+            type: 'success' 
+          });
+        } else {
+          throw error;
+        }
+      } else {
+        setNotification({ msg: "System Bootstrapped: You are now a System Administrator", type: 'success' });
+      }
+      
       await fetchData();
-      setNotification({ msg: "System Bootstrapped: You are now a System Administrator", type: 'success' });
     } catch (err: any) {
       setNotification({ msg: err.message || "Bootstrap failed", type: 'error' });
     } finally {
       setIsSubmitting(false);
-      setTimeout(() => setNotification(null), 3000);
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -278,17 +308,31 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
     if (!isAdmin) return;
     setIsSubmitting(true);
     try {
+      const payload: any = { 
+        id: newUser.id, 
+        full_name: newUser.name, 
+        role_name: newUser.role, 
+        home_branch_name: newUser.branch_id 
+      };
+      
+      if (newUser.email) payload.email = newUser.email;
+
       const { error } = await supabase
         .from('users')
-        .insert([{ 
-          id: newUser.id, 
-          full_name: newUser.name, 
-          email: newUser.email,
-          role_name: newUser.role, 
-          home_branch_name: newUser.branch_id 
-        }]);
+        .insert([payload]);
       
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('column "email" of relation "users" does not exist')) {
+          const { id, full_name, role_name, home_branch_name } = payload;
+          const { error: retryError } = await supabase
+            .from('users')
+            .insert([{ id, full_name, role_name, home_branch_name }]);
+          if (retryError) throw retryError;
+        } else {
+          throw error;
+        }
+      }
+
       await fetchData();
       setIsAddingUser(false);
       setNewUser({ id: '', name: '', email: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });

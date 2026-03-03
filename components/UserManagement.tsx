@@ -138,24 +138,38 @@ const UserManagement: React.FC = () => {
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
+        const payload: any = {
+          id: newUser.id || crypto.randomUUID(),
+          full_name: newUser.name,
+          role_name: newUser.role,
+          home_branch_name: newUser.branch_id
+        };
+
+        if (newUser.email) payload.email = newUser.email;
+
         const { error } = await supabase
           .from('users')
-          .insert([{
-            id: newUser.id || crypto.randomUUID(),
-            full_name: newUser.name,
-            email: newUser.email,
-            role_name: newUser.role,
-            home_branch_name: newUser.branch_id
-          }]);
+          .insert([payload]);
         
-        if (error) throw error;
+        if (error) {
+          if (error.message.includes('column "email" of relation "users" does not exist')) {
+            const { id, full_name, role_name, home_branch_name } = payload;
+            const { error: retryError } = await supabase
+              .from('users')
+              .insert([{ id, full_name, role_name, home_branch_name }]);
+            if (retryError) throw retryError;
+          } else {
+            throw error;
+          }
+        }
       }
 
       setUsers(prev => {
-        if (prev.some(u => u.id === newUser.id)) {
-          return prev.map(u => u.id === newUser.id ? newUser : u);
+        const userId = newUser.id || 'new-id';
+        if (prev.some(u => u.id === userId)) {
+          return prev.map(u => u.id === userId ? { ...newUser, id: userId } : u);
         }
-        return [...prev, newUser];
+        return [...prev, { ...newUser, id: userId }];
       });
       setNotification({ msg: `Operator "${newUser.name}" added to registry`, type: 'success' });
       setIsAdding(false);
