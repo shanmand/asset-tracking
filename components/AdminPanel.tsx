@@ -29,10 +29,34 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
 
 const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
-  const { profile } = useUser();
+  const { profile, user } = useUser();
   const isAdmin = currentRole === UserRole.ADMIN;
   const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
-  
+
+  const handleBootstrapAdmin = async () => {
+    if (!user) return;
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .insert([{
+          id: user.id,
+          full_name: user.user_metadata?.full_name || user.email,
+          email: user.email,
+          role_name: UserRole.ADMIN,
+          home_branch_name: 'Kya Sands'
+        }]);
+      if (error) throw error;
+      await fetchData();
+      setNotification({ msg: "System Bootstrapped: You are now a System Administrator", type: 'success' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Bootstrap failed", type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
   // Fee Form State
   const [targetAsset, setTargetAsset] = useState<string>('');
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().split('T')[0]);
@@ -238,7 +262,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   };
 
   const [isAddingUser, setIsAddingUser] = useState(false);
-  const [newUser, setNewUser] = useState({ id: '', name: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
+  const [newUser, setNewUser] = useState({ id: '', name: '', email: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
 
   const generateUUID = () => {
     return crypto.randomUUID();
@@ -259,6 +283,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         .insert([{ 
           id: newUser.id, 
           full_name: newUser.name, 
+          email: newUser.email,
           role_name: newUser.role, 
           home_branch_name: newUser.branch_id 
         }]);
@@ -266,7 +291,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
       if (error) throw error;
       await fetchData();
       setIsAddingUser(false);
-      setNewUser({ id: '', name: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
+      setNewUser({ id: '', name: '', email: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
       setNotification({ msg: "User added successfully", type: 'success' });
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to add user", type: 'error' });
@@ -356,6 +381,30 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           <Zap size={14} /> System Maintenance
         </button>
       </div>
+
+      {isSupabaseConfigured && dbUsers.length === 0 && (
+        <div className="p-8 bg-amber-50 border-2 border-amber-200 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-amber-100/50 animate-in fade-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-200">
+              <ShieldCheck size={32} />
+            </div>
+            <div>
+              <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">System Bootstrap Required</h4>
+              <p className="text-xs text-slate-600 font-medium mt-1 max-w-md">
+                No users found in the registry. You must authorize your current account as the primary <strong>System Administrator</strong> to unlock administrative operations.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={handleBootstrapAdmin}
+            disabled={isSubmitting}
+            className="w-full md:w-auto px-8 py-4 bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-200 flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
+            Claim Administrator Role
+          </button>
+        </div>
+      )}
 
       {activeSubTab === 'fees' ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -500,6 +549,17 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                       value={newUser.name}
                       onChange={e => setNewUser({...newUser, name: e.target.value})}
                       placeholder="e.g. John Doe"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Email Address</label>
+                    <input 
+                      required
+                      type="email" 
+                      className="w-full p-2 text-xs font-bold border border-slate-200 rounded-lg"
+                      value={newUser.email}
+                      onChange={e => setNewUser({...newUser, email: e.target.value})}
+                      placeholder="e.g. john@example.com"
                     />
                   </div>
                   <div className="space-y-1">

@@ -32,8 +32,9 @@ CREATE TABLE public.logistics_units (
 );
 
 CREATE TABLE public.users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY, -- Removed FK to auth.users to allow pre-creation
     full_name TEXT,
+    email TEXT UNIQUE,
     role_name TEXT DEFAULT 'Crates Department',
     home_branch_name TEXT DEFAULT 'Kya Sands',
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -143,16 +144,37 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
   user_count int;
+  existing_user_id uuid;
 BEGIN
   SELECT count(*) INTO user_count FROM public.users;
   
-  INSERT INTO public.users (id, full_name, role_name, home_branch_name)
-  VALUES (
-    NEW.id, 
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email), 
-    COALESCE(NEW.raw_user_meta_data->>'role_name', CASE WHEN user_count = 0 THEN 'System Administrator' ELSE 'Staff' END), 
-    COALESCE(NEW.raw_user_meta_data->>'home_branch_name', 'Kya Sands')
-  );
+  -- Check if a user with this email already exists (pre-created by admin)
+  SELECT id INTO existing_user_id FROM public.users WHERE email = NEW.email;
+  
+  IF existing_user_id IS NOT NULL THEN
+    -- Update existing record with the real auth ID
+    UPDATE public.users 
+    SET id = NEW.id,
+        full_name = COALESCE(NEW.raw_user_meta_data->>'full_name', full_name),
+        role_name = COALESCE(NEW.raw_user_meta_data->>'role_name', role_name),
+        home_branch_name = COALESCE(NEW.raw_user_meta_data->>'home_branch_name', home_branch_name)
+    WHERE email = NEW.email;
+    
+    -- If the ID changed, we might have a problem with PK, but since we are updating the record with NEW.id, 
+    -- we should probably delete the old one or just update it if the PK is the same.
+    -- Actually, if we update the PK, it might fail if NEW.id already exists.
+    -- But NEW.id is from auth.users and just got created.
+  ELSE
+    INSERT INTO public.users (id, full_name, email, role_name, home_branch_name)
+    VALUES (
+      NEW.id, 
+      COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email), 
+      NEW.email,
+      COALESCE(NEW.raw_user_meta_data->>'role_name', CASE WHEN user_count = 0 THEN 'System Administrator' ELSE 'Staff' END), 
+      COALESCE(NEW.raw_user_meta_data->>'home_branch_name', 'Kya Sands')
+    );
+  END IF;
+  
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -179,7 +201,21 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 -- Helper function to check if user is admin
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
+DECLARE
+  user_count int;
 BEGIN
+  SELECT count(*) INTO user_count FROM public.users;
+  
+  -- Bootstrap: If no users exist, allow the action (the first user will be created as admin)
+  IF user_count = 0 THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Also allow if the current user is the ONLY user (in case they lost admin role during setup)
+  IF user_count = 1 AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid()) THEN
+    RETURN TRUE;
+  END IF;
+
   RETURN EXISTS (
     SELECT 1 FROM public.users
     WHERE id = auth.uid() AND role_name = 'System Administrator'

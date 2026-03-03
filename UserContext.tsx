@@ -33,6 +33,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .select(`
           id, 
           full_name, 
+          email,
           home_branch_name,
           role_name
         `)
@@ -46,7 +47,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         full_name: data.full_name,
         role_name: data.role_name as UserRole || UserRole.ADMIN,
         home_branch_name: data.home_branch_name || 'Kya Sands',
-        email: user?.email || '',
+        email: data.email || user?.email || '',
       };
 
       setProfile(profileData);

@@ -39,6 +39,7 @@ const UserManagement: React.FC = () => {
   const [newUser, setNewUser] = useState({
     id: '',
     name: '',
+    email: '',
     role: UserRole.STAFF,
     branch_id: 'Kya Sands'
   });
@@ -140,8 +141,9 @@ const UserManagement: React.FC = () => {
         const { error } = await supabase
           .from('users')
           .insert([{
-            id: newUser.id,
+            id: newUser.id || crypto.randomUUID(),
             full_name: newUser.name,
+            email: newUser.email,
             role_name: newUser.role,
             home_branch_name: newUser.branch_id
           }]);
@@ -157,7 +159,7 @@ const UserManagement: React.FC = () => {
       });
       setNotification({ msg: `Operator "${newUser.name}" added to registry`, type: 'success' });
       setIsAdding(false);
-      setNewUser({ id: '', name: '', role: UserRole.STAFF, branch_id: 'Kya Sands' });
+      setNewUser({ id: '', name: '', email: '', role: UserRole.STAFF, branch_id: 'Kya Sands' });
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to add operator", type: 'error' });
     } finally {
@@ -223,6 +225,17 @@ const UserManagement: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
                 value={newUser.name}
                 onChange={e => setNewUser({...newUser, name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Email Address</label>
+              <input 
+                required
+                type="email"
+                placeholder="e.g. sipho@lupo.co.za"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newUser.email}
+                onChange={e => setNewUser({...newUser, email: e.target.value})}
               />
             </div>
             <div className="space-y-2">
@@ -306,6 +319,7 @@ const UserManagement: React.FC = () => {
                       <div>
                          <p className="text-sm font-black text-slate-900">{user.name}</p>
                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">UID: {user.id}</p>
+                         {(user as any).email && <p className="text-[10px] text-blue-500 font-medium">{ (user as any).email }</p>}
                       </div>
                     </div>
                   </td>
