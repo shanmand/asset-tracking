@@ -59,7 +59,7 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
 
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    // Removed isAdmin restriction as per user request
     
     setIsLoading(true);
     try {
@@ -107,14 +107,12 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
           <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-slate-50">
             <Filter size={16} /> Filter
           </button>
-          {isAdmin && (
-            <button 
-              onClick={() => setIsAdding(true)}
-              className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg transition-all"
-            >
-              <Plus size={16} /> New Asset Type
-            </button>
-          )}
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg transition-all"
+          >
+            <Plus size={16} /> New Asset Type
+          </button>
         </div>
       </div>
 

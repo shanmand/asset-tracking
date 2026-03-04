@@ -79,7 +79,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setProfile(profileData);
     } catch (err) {
-      console.error("Profile Fetch Error:", err);
+      console.error("Profile Fetch Error (User likely not in DB yet):", err);
       setProfile({
         id: userId,
         full_name: "Guest User",
@@ -87,6 +87,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         home_branch_name: 'Kya Sands',
         email: user?.email || ''
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -94,8 +96,9 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Fix: Using type casting to bypass property missing errors on SupabaseAuthClient in specific environments
     (supabase.auth as any).getSession().then(({ data: { session } }: any) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else {
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
         setIsLoading(false);
       }
     });
@@ -113,10 +116,6 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     return () => subscription.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (profile) setIsLoading(false);
-  }, [profile]);
 
   const logout = async () => {
     // Fix: Using type casting to bypass property missing errors on SupabaseAuthClient in specific environments

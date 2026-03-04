@@ -454,16 +454,16 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
         </button>
       </div>
 
-      {isSupabaseConfigured && dbUsers.length === 0 && (
-        <div className="p-8 bg-amber-50 border-2 border-amber-200 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-amber-100/50 animate-in fade-in slide-in-from-top duration-500">
+      {isSupabaseConfigured && (!profile || profile.role_name !== UserRole.ADMIN) && (
+        <div className="p-8 bg-amber-50 border-2 border-amber-200 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-amber-100/50 animate-in fade-in slide-in-from-top duration-500 mb-8">
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-200">
               <ShieldCheck size={32} />
             </div>
             <div>
-              <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">System Bootstrap Required</h4>
+              <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">System Access Restricted</h4>
               <p className="text-xs text-slate-600 font-medium mt-1 max-w-md">
-                No users found in the registry. You must authorize your current account as the primary <strong>System Administrator</strong> to unlock administrative operations.
+                You are currently viewing the system with restricted permissions. If you are the system owner, you can promote your current account to <strong>System Administrator</strong>.
               </p>
             </div>
           </div>

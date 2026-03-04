@@ -232,11 +232,11 @@ END $$;
 
 -- Asset Master Policies
 CREATE POLICY "assets_select" ON public.asset_master FOR SELECT TO authenticated USING (true);
-CREATE POLICY "assets_admin" ON public.asset_master FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "assets_manage" ON public.asset_master FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Locations Policies
 CREATE POLICY "locations_select" ON public.locations FOR SELECT TO authenticated USING (true);
-CREATE POLICY "locations_admin" ON public.locations FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "locations_manage" ON public.locations FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Users Policies
 CREATE POLICY "users_select" ON public.users FOR SELECT TO authenticated USING (true);

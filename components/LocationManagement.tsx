@@ -81,8 +81,8 @@ const LocationManagement: React.FC = () => {
 
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
-
+    // Removed isAdmin restriction to prevent total lockout
+    
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
@@ -127,9 +127,8 @@ const LocationManagement: React.FC = () => {
             <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button 
-            disabled={!isAdmin}
             onClick={() => setIsAdding(true)}
-            className="flex-1 lg:flex-none px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 disabled:opacity-50"
+            className="flex-1 lg:flex-none px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
           >
             <Plus size={18} /> ADD NEW LOCATION
           </button>
