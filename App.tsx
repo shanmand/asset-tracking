@@ -25,7 +25,8 @@ import {
   Settings,
   Database,
   Gavel,
-  Tags
+  Tags,
+  ArrowDownToLine
 } from 'lucide-react';
 import { UserProvider, useUser } from './UserContext';
 import DashboardView from './components/DashboardView';
@@ -42,6 +43,8 @@ import UserManagement from './components/UserManagement';
 import LocationManagement from './components/LocationManagement';
 import SupabaseConnection from './components/SupabaseConnection';
 import AdminPanel from './components/AdminPanel';
+import LogisticsRegistry from './components/LogisticsRegistry';
+import BatchManagement from './components/BatchManagement';
 import { UserRole } from './types';
 import { supabase } from './supabase';
 
@@ -59,7 +62,9 @@ enum NavItem {
   USERS = 'users',
   LOCATIONS = 'locations',
   CONNECT = 'connect',
-  ADMIN = 'admin-panel'
+  ADMIN = 'admin-panel',
+  LOGISTICS_REGISTRY = 'logistics-registry',
+  BATCH_MANAGEMENT = 'batch-management'
 }
 
 const AppContent: React.FC = () => {
@@ -99,6 +104,8 @@ const AppContent: React.FC = () => {
       case NavItem.LOCATIONS: return <LocationManagement />;
       case NavItem.CONNECT: return <SupabaseConnection />;
       case NavItem.ADMIN: return <AdminPanel currentRole={profile?.role_name || UserRole.ADMIN} />;
+      case NavItem.LOGISTICS_REGISTRY: return <LogisticsRegistry />;
+      case NavItem.BATCH_MANAGEMENT: return <BatchManagement />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
     }
   };
@@ -118,6 +125,7 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<History size={18} />} label="Batch Forensic" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Operations</div>
+          <SidebarButton active={activeTab === NavItem.BATCH_MANAGEMENT} onClick={() => setActiveTab(NavItem.BATCH_MANAGEMENT)} icon={<ArrowDownToLine size={18} />} label="Inventory Intake" />
           <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => setActiveTab(NavItem.LOGISTICS)} icon={<ClipboardList size={18} />} label="Capture Movement" />
           <SidebarButton active={activeTab === NavItem.LOSSES} onClick={() => setActiveTab(NavItem.LOSSES)} icon={<Skull size={18} />} label="Report Loss" />
           <SidebarButton active={activeTab === NavItem.CLAIMS} onClick={() => setActiveTab(NavItem.CLAIMS)} icon={<Gavel size={18} />} label="Claims Center" />
@@ -128,6 +136,7 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.ASSETS} onClick={() => setActiveTab(NavItem.ASSETS)} icon={<Tags size={18} />} label="Asset Registry" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">System</div>
+          <SidebarButton active={activeTab === NavItem.LOGISTICS_REGISTRY} onClick={() => setActiveTab(NavItem.LOGISTICS_REGISTRY)} icon={<Truck size={18} />} label="Logistics Registry" />
           <SidebarButton active={activeTab === NavItem.ADMIN} onClick={() => setActiveTab(NavItem.ADMIN)} icon={<Settings size={18} />} label="Admin Panel" />
           <SidebarButton active={activeTab === NavItem.USERS} onClick={() => setActiveTab(NavItem.USERS)} icon={<UsersIcon size={18} />} label="User Management" />
           <SidebarButton active={activeTab === NavItem.LOCATIONS} onClick={() => setActiveTab(NavItem.LOCATIONS)} icon={<MapPin size={18} />} label="Location Registry" />
