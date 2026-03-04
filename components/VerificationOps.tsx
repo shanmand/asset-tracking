@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_USERS } from '../constants';
+import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_USERS } from '../constants';
 import { CheckCircle2, AlertTriangle, Truck, MapPin, Search, Zap, Package, UserCheck, XCircle, History, Calculator, ClipboardCheck, Loader2 } from 'lucide-react';
-import { Batch, User as UserType, MovementCondition, BatchMovement, LogisticsUnit, AssetMaster } from '../types';
+import { Batch, User as UserType, MovementCondition, BatchMovement, Truck as TruckType, Driver, AssetMaster } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface VerificationOpsProps {
@@ -12,7 +12,8 @@ interface VerificationOpsProps {
 const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [movements, setMovements] = useState<BatchMovement[]>([]);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +29,8 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
       if (!isSupabaseConfigured) {
         setBatches([]);
         setMovements([]);
-        setLogistics([]);
+        setTrucks([]);
+        setDrivers([]);
         setAssets([]);
         setUsers([]);
         setIsLoading(false);
@@ -37,17 +39,19 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
 
       setIsLoading(true);
       try {
-        const [bRes, mRes, lRes, aRes, uRes] = await Promise.all([
+        const [bRes, mRes, tRes, dRes, aRes, uRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('batch_movements').select('*'),
-          supabase.from('logistics_units').select('*'),
+          supabase.from('trucks').select('*'),
+          supabase.from('drivers').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('users').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);
         if (mRes.data) setMovements(mRes.data);
-        if (lRes.data) setLogistics(lRes.data);
+        if (tRes.data) setTrucks(tRes.data);
+        if (dRes.data) setDrivers(dRes.data);
         if (aRes.data) setAssets(aRes.data);
         if (uRes.data) setUsers(uRes.data);
       } catch (err) {
@@ -75,7 +79,8 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
   const selectedBatch = incomingBatches.find(b => b.id === selectedBatchId);
   const lastMovement = selectedBatch ? movements.filter(m => m.batch_id === selectedBatch.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : null;
   const dispatcher = lastMovement ? users.find(u => u.id === lastMovement.origin_user_id) : null;
-  const truck = lastMovement?.logistics_id ? logistics.find(l => l.id === lastMovement.logistics_id) : null;
+  const truck = lastMovement?.truck_id ? trucks.find(t => t.id === lastMovement.truck_id) : null;
+  const driver = lastMovement?.driver_id ? drivers.find(d => d.id === lastMovement.driver_id) : null;
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,7 +232,11 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
                             </div>
                             <div className="flex justify-between">
                                <span className="text-xs text-slate-500">Transporter Unit</span>
-                               <span className="text-xs font-bold text-slate-700">{truck?.truck_plate || 'Direct Transfer'}</span>
+                               <span className="text-xs font-bold text-slate-700">{truck?.plate_number || 'Direct Transfer'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                               <span className="text-xs text-slate-500">Driver</span>
+                               <span className="text-xs font-bold text-slate-700">{driver?.full_name || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between border-t border-slate-200 pt-2">
                                <span className="text-xs text-slate-500">Expected Liability</span>

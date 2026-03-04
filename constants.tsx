@@ -1,4 +1,16 @@
-import { AssetMaster, AssetType, FeeSchedule, FeeType, Location, LocationType, LocationCategory, LogisticsUnit, Batch, BatchMovement, MovementCondition, ThaanSlip, Claim, ClaimAudit, InventoryRecord, AssetLoss, LossType, AuditLog, UserRole, User } from './types';
+import { AssetMaster, AssetType, FeeSchedule, FeeType, Location, LocationType, LocationCategory, Truck, Driver, Batch, BatchMovement, MovementCondition, ThaanSlip, Claim, ClaimAudit, InventoryRecord, AssetLoss, LossType, AuditLog, UserRole, User } from './types';
+
+export const MOCK_TRUCKS: Truck[] = [
+  { id: 'TRK-001', plate_number: 'GP 22 SH', model: 'Hino 300', capacity: 4000 },
+  { id: 'TRK-002', plate_number: 'CA 99 LU', model: 'Isuzu NPR', capacity: 3500 },
+  { id: 'TRK-003', plate_number: 'ZN 44 BB', model: 'Mercedes Atego', capacity: 8000 },
+];
+
+export const MOCK_DRIVERS: Driver[] = [
+  { id: 'DRV-001', full_name: 'Dumisani Kumalo', license_number: 'L-9001', phone: '082 111 2222' },
+  { id: 'DRV-002', full_name: 'Pieter van Wyk', license_number: 'L-9002', phone: '083 333 4444' },
+  { id: 'DRV-003', full_name: 'Sipho Ndlovu', license_number: 'L-9003', phone: '084 555 6666' },
+];
 
 export const MOCK_USERS: User[] = [
   { id: 'U-001', name: 'John Dlamini', role: UserRole.ADMIN, branch_id: 'LOC-JHB-01' },
@@ -37,13 +49,6 @@ export const MOCK_FEES: FeeSchedule[] = [
   { id: 'FEE-SAL-01', asset_id: 'SH-001', fee_type: FeeType.SALVAGE_CREDIT, amount_zar: 15.00, effective_from: '2025-01-01', effective_to: null },
 ];
 
-export const MOCK_LOGISTICS: LogisticsUnit[] = [
-  { id: 'LOG-001', truck_plate: 'GP 22 SH', driver_name: 'Dumisani Kumalo' },
-  { id: 'LOG-002', truck_plate: 'CA 99 LU', driver_name: 'Pieter van Wyk' },
-  { id: 'LOG-003', truck_plate: 'ZN 44 BB', driver_name: 'Sipho Ndlovu' },
-  { id: 'LOG-004', truck_plate: 'Lupo Fleet 10', driver_name: 'Johannes Mokoena' },
-];
-
 const generateMockData = () => {
   const batches: Batch[] = [];
   const movements: BatchMovement[] = [];
@@ -74,7 +79,8 @@ const generateMockData = () => {
       timestamp: date,
       condition: Math.random() > 0.05 ? MovementCondition.CLEAN : MovementCondition.DIRTY,
       origin_user_id: 'U-003',
-      logistics_id: MOCK_LOGISTICS[Math.floor(Math.random() * MOCK_LOGISTICS.length)].id
+      truck_id: MOCK_TRUCKS[Math.floor(Math.random() * MOCK_TRUCKS.length)].id,
+      driver_id: MOCK_DRIVERS[Math.floor(Math.random() * MOCK_DRIVERS.length)].id
     });
   }
 
@@ -93,7 +99,6 @@ export const MOCK_LOSSES: AssetLoss[] = [
     loss_type: LossType.MISSING,
     lost_quantity: 42, 
     last_known_location_id: 'LOC-CUST-01', 
-    last_driver_name: 'Dumisani Kumalo',
     reported_by: 'U-003',
     timestamp: '2025-05-20T14:00:00Z',
     notes: 'Missing during Lupo Bread delivery at Hyper Woodmead.',
@@ -107,7 +112,6 @@ export const MOCK_LOSSES: AssetLoss[] = [
     loss_type: LossType.SCRAPPED,
     lost_quantity: 8, 
     last_known_location_id: 'LOC-JHB-01', 
-    last_driver_name: 'Johannes Mokoena',
     reported_by: 'U-003',
     timestamp: '2025-05-22T09:00:00Z',
     notes: 'Forklift damage at Lupo JHB loading bay.',
@@ -125,7 +129,8 @@ export const MOCK_CLAIMS: Claim[] = [
   { 
     id: 'CLM-LB-001', 
     batch_id: 'LB-BATCH-012', 
-    driver_id: 'LOG-001', 
+    truck_id: 'TRK-001',
+    driver_id: 'DRV-001', 
     thaan_slip_id: 'THAAN-001', 
     type: 'Damaged', 
     amount_claimed_zar: 4200.00, 
@@ -136,7 +141,8 @@ export const MOCK_CLAIMS: Claim[] = [
   { 
     id: 'CLM-LB-002', 
     batch_id: 'LB-BATCH-044', 
-    driver_id: 'LOG-003', 
+    truck_id: 'TRK-002',
+    driver_id: 'DRV-003', 
     thaan_slip_id: 'THAAN-002', 
     type: 'Dirty', 
     amount_claimed_zar: 850.00, 

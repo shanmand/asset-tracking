@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { MOCK_CLAIMS, MOCK_BATCHES, MOCK_CLAIM_AUDITS, MOCK_LOGISTICS } from '../constants';
-import { AlertCircle, Clock, CheckCircle2, History, User, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2 } from 'lucide-react';
-import { ClaimStatus, Claim, Batch, ClaimAudit, LogisticsUnit } from '../types';
+import { MOCK_CLAIMS, MOCK_BATCHES, MOCK_CLAIM_AUDITS } from '../constants';
+import { AlertCircle, Clock, CheckCircle2, History, User, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon } from 'lucide-react';
+import { ClaimStatus, Claim, Batch, ClaimAudit, Truck, Driver } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface ClaimsManagerProps {
@@ -13,7 +13,8 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [audits, setAudits] = useState<ClaimAudit[]>([]);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClaimId, setSelectedClaimId] = useState<string>('');
 
@@ -23,18 +24,20 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         setClaims([]);
         setBatches([]);
         setAudits([]);
-        setLogistics([]);
+        setTrucks([]);
+        setDrivers([]);
         setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       try {
-        const [cRes, bRes, aRes, lRes] = await Promise.all([
+        const [cRes, bRes, aRes, tRes, dRes] = await Promise.all([
           supabase.from('claims').select('*'),
           supabase.from('batches').select('*'),
           supabase.from('claim_audits').select('*'),
-          supabase.from('logistics_units').select('*')
+          supabase.from('trucks').select('*'),
+          supabase.from('drivers').select('*')
         ]);
 
         if (cRes.data) {
@@ -43,7 +46,8 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         }
         if (bRes.data) setBatches(bRes.data);
         if (aRes.data) setAudits(aRes.data);
-        if (lRes.data) setLogistics(lRes.data);
+        if (tRes.data) setTrucks(tRes.data);
+        if (dRes.data) setDrivers(dRes.data);
       } catch (err) {
         console.error("Claims Fetch Error:", err);
       } finally {
@@ -56,7 +60,8 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
 
   const selectedClaim = claims.find(c => c.id === selectedClaimId);
   const auditLogs = audits.filter(a => a.claim_id === selectedClaimId);
-  const driver = selectedClaim ? logistics.find(l => l.id === selectedClaim.driver_id) : null;
+  const driver = selectedClaim ? drivers.find(d => d.id === selectedClaim.driver_id) : null;
+  const truck = selectedClaim ? trucks.find(t => t.id === selectedClaim.truck_id) : null;
 
   const workflow: ClaimStatus[] = ['Lodged', 'Under Assessment', 'Returned for Assessment', 'Accepted'];
 

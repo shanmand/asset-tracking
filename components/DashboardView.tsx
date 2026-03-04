@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User, History, UserCheck, Skull, MapPin, Loader2 } from 'lucide-react';
-import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
+import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
 import { LocationType, UserRole, User as UserType, Batch, AssetLoss, Location, User as DBUser, AssetMaster, Claim } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 

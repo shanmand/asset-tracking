@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
 import { Truck, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
-import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
-import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, LogisticsUnit, AssetMaster, BatchMovement } from '../types';
+import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
+import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface LogisticsOpsProps {
@@ -14,13 +14,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   
   const [locations, setLocations] = useState<Location[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState(''); 
-  const [logisticsId, setLogisticsId] = useState('');
+  const [truckId, setTruckId] = useState('');
+  const [driverId, setDriverId] = useState('');
   const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([]);
   const [condition, setCondition] = useState(MovementCondition.CLEAN);
   const [thaanFile, setThaanFile] = useState<File | null>(null);
@@ -34,7 +36,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     if (!isSupabaseConfigured) {
       setLocations([]);
       setBatches([]);
-      setLogistics([]);
+      setTrucks([]);
+      setDrivers([]);
       setAssetsMaster([]);
       setIsLoading(false);
       return;
@@ -42,10 +45,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
     setIsLoading(true);
     try {
-      const [locsRes, batchesRes, logsRes, assetsRes] = await Promise.all([
+      const [locsRes, batchesRes, trucksRes, driversRes, assetsRes] = await Promise.all([
         supabase.from('locations').select('*'),
         supabase.from('batches').select('*'),
-        supabase.from('logistics_units').select('*'),
+        supabase.from('trucks').select('*'),
+        supabase.from('drivers').select('*'),
         supabase.from('asset_master').select('*')
       ]);
 
@@ -58,9 +62,13 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
         }
       }
       if (batchesRes.data) setBatches(batchesRes.data);
-      if (logsRes.data) {
-        setLogistics(logsRes.data);
-        if (logsRes.data.length > 0) setLogisticsId(logsRes.data[0].id);
+      if (trucksRes.data) {
+        setTrucks(trucksRes.data);
+        if (trucksRes.data.length > 0) setTruckId(trucksRes.data[0].id);
+      }
+      if (driversRes.data) {
+        setDrivers(driversRes.data);
+        if (driversRes.data.length > 0) setDriverId(driversRes.data[0].id);
       }
       if (assetsRes.data) {
         setAssetsMaster(assetsRes.data);
@@ -94,6 +102,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     const validationErrors: string[] = [];
     if (assets.some(a => a.quantity <= 0)) validationErrors.push("All line items must have a quantity > 0.");
     if (origin === destination) validationErrors.push("Origin and Destination cannot be the same.");
+    if (!truckId) validationErrors.push("Please select a truck.");
+    if (!driverId) validationErrors.push("Please select a driver.");
     
     const destType = locations.find(l => l.id === destination)?.type;
     if (destType === LocationType.AT_CUSTOMER && !thaanFile) {
@@ -127,7 +137,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
               batch_id: item.batchId,
               from_location_id: origin,
               to_location_id: destination,
-              logistics_id: logisticsId,
+              truck_id: truckId,
+              driver_id: driverId,
               timestamp: new Date().toISOString(),
               condition: condition,
               origin_user_id: currentUser.id
@@ -191,7 +202,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     }
   };
 
-  const selectedTruck = logistics.find(l => l.id === logisticsId);
+  const selectedTruck = trucks.find(t => t.id === truckId);
+  const selectedDriver = drivers.find(d => d.id === driverId);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
@@ -292,15 +304,29 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
               {!isReadOnly && (
                 <>
-                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4">
-                    <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Truck size={14} /> Logistics Details</h4>
-                    <select 
-                      className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
-                      value={logisticsId}
-                      onChange={e => setLogisticsId(e.target.value)}
-                    >
-                      {logistics.map(l => <option key={l.id} value={l.id}>{l.truck_plate} - {l.driver_name}</option>)}
-                    </select>
+                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Truck size={14} /> Select Truck</h4>
+                      <select 
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                        value={truckId}
+                        onChange={e => setTruckId(e.target.value)}
+                      >
+                        <option value="">Select Truck</option>
+                        {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><User size={14} /> Select Driver</h4>
+                      <select 
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                        value={driverId}
+                        onChange={e => setDriverId(e.target.value)}
+                      >
+                        <option value="">Select Driver</option>
+                        {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                      </select>
+                    </div>
                   </div>
 
                   {errors.length > 0 && (
@@ -330,8 +356,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg"><Truck size={24} /></div>
               <div>
-                <p className="text-lg font-bold text-slate-800 leading-none mb-1">{selectedTruck?.truck_plate || 'Unassigned'}</p>
-                <p className="text-xs text-slate-500">{selectedTruck?.driver_name || 'No Driver'}</p>
+                <p className="text-lg font-bold text-slate-800 leading-none mb-1">{selectedTruck?.plate_number || 'Unassigned'}</p>
+                <p className="text-xs text-slate-500">{selectedDriver?.full_name || 'No Driver'}</p>
               </div>
             </div>
           </div>

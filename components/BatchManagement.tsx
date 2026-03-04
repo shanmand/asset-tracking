@@ -53,6 +53,14 @@ const BatchManagement: React.FC = () => {
 
   const handleAddBatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newBatch.asset_id) {
+      setNotification({ msg: "Please select an asset type", type: 'error' });
+      return;
+    }
+    if (!newBatch.current_location_id) {
+      setNotification({ msg: "Please select an initial location", type: 'error' });
+      return;
+    }
     if (newBatch.quantity <= 0) {
       setNotification({ msg: "Quantity must be greater than 0", type: 'error' });
       return;
@@ -68,7 +76,7 @@ const BatchManagement: React.FC = () => {
         const { error } = await supabase.from('batches').insert([payload]);
         if (error) throw error;
       }
-      setNotification({ msg: `Batch ${newBatch.id} created successfully`, type: 'success' });
+      setNotification({ msg: `Batch ${newBatch.id || 'created'} successfully`, type: 'success' });
       setIsAdding(false);
       setNewBatch({
         id: '',

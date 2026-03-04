@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Award, TrendingDown, Clock, ShieldAlert, User, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
-import { LocationType, Batch, BatchMovement, Location, LogisticsUnit, FeeSchedule, AssetMaster } from '../types';
+import { LocationType, Batch, BatchMovement, Location, Truck, Driver, FeeSchedule, AssetMaster } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 const ExecutiveReport: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [movements, setMovements] = useState<BatchMovement[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,11 +23,12 @@ const ExecutiveReport: React.FC = () => {
 
       setIsLoading(true);
       try {
-        const [bRes, mRes, lRes, logRes, fRes, aRes] = await Promise.all([
+        const [bRes, mRes, lRes, tRes, dRes, fRes, aRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('batch_movements').select('*'),
           supabase.from('locations').select('*'),
-          supabase.from('logistics_units').select('*'),
+          supabase.from('trucks').select('*'),
+          supabase.from('drivers').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('asset_master').select('*')
         ]);
@@ -34,7 +36,8 @@ const ExecutiveReport: React.FC = () => {
         if (bRes.data) setBatches(bRes.data);
         if (mRes.data) setMovements(mRes.data);
         if (lRes.data) setLocations(lRes.data);
-        if (logRes.data) setLogistics(logRes.data);
+        if (tRes.data) setTrucks(tRes.data);
+        if (dRes.data) setDrivers(dRes.data);
         if (fRes.data) setFees(fRes.data);
         if (aRes.data) setAssets(aRes.data);
       } catch (err) {
@@ -85,7 +88,7 @@ const ExecutiveReport: React.FC = () => {
     const oldestStagnant = stagnantBatches[0];
     const lastMovement = movements.filter(m => m.batch_id === oldestStagnant?.id).sort((a,b) => b.timestamp.localeCompare(a.timestamp))[0];
     const forensics = {
-      driver: logistics.find(l => l.id === lastMovement?.logistics_id)?.driver_name || 'System',
+      driver: drivers.find(d => d.id === lastMovement?.driver_id)?.full_name || 'System',
       location: locations.find(l => l.id === oldestStagnant?.current_location_id)?.name || 'Unknown'
     };
 

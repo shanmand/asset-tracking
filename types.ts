@@ -90,10 +90,21 @@ export interface Location {
   category: LocationCategory;
 }
 
-export interface LogisticsUnit {
+export interface Truck {
   id: string;
-  truck_plate: string;
-  driver_name: string;
+  plate_number: string;
+  model?: string;
+  capacity?: number;
+  created_at?: string;
+}
+
+export interface Driver {
+  id: string;
+  full_name: string;
+  license_number?: string;
+  phone?: string;
+  contact_number?: string;
+  created_at?: string;
 }
 
 export interface Batch {
@@ -110,7 +121,8 @@ export interface BatchMovement {
   batch_id: string;
   from_location_id: string;
   to_location_id: string;
-  logistics_id?: string;
+  truck_id?: string;
+  driver_id?: string;
   timestamp: string;
   condition: MovementCondition;
   origin_user_id: string;
@@ -138,6 +150,7 @@ export interface ThaanSlip {
 export interface Claim {
   id: string;
   batch_id: string;
+  truck_id: string;
   driver_id: string;
   thaan_slip_id: string;
   type: 'Damaged' | 'Dirty';

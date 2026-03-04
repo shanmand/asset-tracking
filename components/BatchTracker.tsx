@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
-import { Package, Truck, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle } from 'lucide-react';
-import { FeeType, ThaanSlip, Batch, BatchMovement, Location, LogisticsUnit, AssetMaster, FeeSchedule } from '../types';
+import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
+import { Package, Truck, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle, User } from 'lucide-react';
+import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 const BatchTracker: React.FC = () => {
@@ -10,7 +10,8 @@ const BatchTracker: React.FC = () => {
   const [thaans, setThaans] = useState<ThaanSlip[]>(isSupabaseConfigured ? [] : MOCK_THAANS);
   const [movements, setMovements] = useState<BatchMovement[]>(isSupabaseConfigured ? [] : MOCK_MOVEMENTS);
   const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>(isSupabaseConfigured ? [] : MOCK_LOGISTICS);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>(isSupabaseConfigured ? [] : MOCK_FEES);
   const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>(isSupabaseConfigured ? [] : MOCK_ASSETS);
   
@@ -26,7 +27,8 @@ const BatchTracker: React.FC = () => {
       setThaans([]);
       setMovements([]);
       setLocations([]);
-      setLogistics([]);
+      setTrucks([]);
+      setDrivers([]);
       setFees([]);
       setAssetsMaster([]);
       setIsLoading(false);
@@ -35,12 +37,13 @@ const BatchTracker: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const [batchesRes, thaansRes, movesRes, locsRes, logsRes, feesRes, assetsRes] = await Promise.all([
+      const [batchesRes, thaansRes, movesRes, locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
         supabase.from('batches').select('*'),
         supabase.from('thaan_slips').select('*'),
         supabase.from('batch_movements').select('*'),
         supabase.from('locations').select('*'),
-        supabase.from('logistics_units').select('*'),
+        supabase.from('trucks').select('*'),
+        supabase.from('drivers').select('*'),
         supabase.from('fee_schedule').select('*'),
         supabase.from('asset_master').select('*')
       ]);
@@ -54,7 +57,8 @@ const BatchTracker: React.FC = () => {
       if (thaansRes.data) setThaans(thaansRes.data);
       if (movesRes.data) setMovements(movesRes.data);
       if (locsRes.data) setLocations(locsRes.data);
-      if (logsRes.data) setLogistics(logsRes.data);
+      if (trucksRes.data) setTrucks(trucksRes.data);
+      if (driversRes.data) setDrivers(driversRes.data);
       if (feesRes.data) setFees(feesRes.data);
       if (assetsRes.data) setAssetsMaster(assetsRes.data);
     } catch (err) {
@@ -179,7 +183,8 @@ const BatchTracker: React.FC = () => {
                 {currentMovements.map((mv, idx) => {
                   const from = locations.find(l => l.id === mv.from_location_id);
                   const to = locations.find(l => l.id === mv.to_location_id);
-                  const logs = mv.logistics_id ? logistics.find(l => l.id === mv.logistics_id) : null;
+                  const truck = mv.truck_id ? trucks.find(t => t.id === mv.truck_id) : null;
+                  const driver = mv.driver_id ? drivers.find(d => d.id === mv.driver_id) : null;
 
                   return (
                     <div key={mv.id} className="relative">
@@ -190,7 +195,8 @@ const BatchTracker: React.FC = () => {
                           <h4 className="font-bold text-slate-800 text-lg mt-1">{from?.name} &rarr; {to?.name}</h4>
                           <div className="flex gap-2 mt-2">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${mv.condition === 'Clean' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{mv.condition}</span>
-                            {logs && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><Truck size={10} /> {logs.truck_plate}</span>}
+                            {truck && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><Truck size={10} /> {truck.plate_number}</span>}
+                            {driver && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><User size={10} /> {driver.full_name}</span>}
                           </div>
                         </div>
                       </div>

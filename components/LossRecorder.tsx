@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_LOGISTICS, MOCK_THAANS, MOCK_ASSETS, MOCK_USERS } from '../constants';
+import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_THAANS, MOCK_ASSETS, MOCK_USERS } from '../constants';
 import { Skull, AlertTriangle, Truck, MapPin, User, FileText, CheckCircle2, XCircle, Search, Info, Database, CreditCard, UserCheck, ShieldAlert, Lock, Loader2 } from 'lucide-react';
-import { LocationType, LossType, User as UserType, UserRole, Batch, BatchMovement, Location, LogisticsUnit, ThaanSlip, AssetMaster, User as DBUser } from '../types';
+import { LocationType, LossType, User as UserType, UserRole, Batch, BatchMovement, Location, Truck as TruckType, Driver, ThaanSlip, AssetMaster, User as DBUser } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface LossRecorderProps {
@@ -15,7 +15,8 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [movements, setMovements] = useState<BatchMovement[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [logistics, setLogistics] = useState<LogisticsUnit[]>([]);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [thaans, setThaans] = useState<ThaanSlip[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [users, setUsers] = useState<DBUser[]>([]);
@@ -44,7 +45,8 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         setBatches([]);
         setMovements([]);
         setLocations([]);
-        setLogistics([]);
+        setTrucks([]);
+        setDrivers([]);
         setThaans([]);
         setAssets([]);
         setUsers([]);
@@ -54,11 +56,12 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
 
       setIsLoading(true);
       try {
-        const [bRes, mRes, lRes, logRes, tRes, aRes, uRes] = await Promise.all([
+        const [bRes, mRes, lRes, tRes, dRes, thRes, aRes, uRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('batch_movements').select('*'),
           supabase.from('locations').select('*'),
-          supabase.from('logistics_units').select('*'),
+          supabase.from('trucks').select('*'),
+          supabase.from('drivers').select('*'),
           supabase.from('thaan_slips').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('users').select('*')
@@ -67,8 +70,9 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         if (bRes.data) setBatches(bRes.data);
         if (mRes.data) setMovements(mRes.data);
         if (lRes.data) setLocations(lRes.data);
-        if (logRes.data) setLogistics(logRes.data);
-        if (tRes.data) setThaans(tRes.data);
+        if (tRes.data) setTrucks(tRes.data);
+        if (dRes.data) setDrivers(dRes.data);
+        if (thRes.data) setThaans(thRes.data);
         if (aRes.data) setAssets(aRes.data);
         if (uRes.data) setUsers(uRes.data);
       } catch (err) {
@@ -95,14 +99,15 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     
     const lastMv = batchMovements[0];
     const loc = locations.find(l => l.id === (lastMv?.to_location_id || batch.current_location_id));
-    const logUnit = lastMv?.logistics_id ? logistics.find(l => l.id === lastMv.logistics_id) : null;
+    const truck = lastMv?.truck_id ? trucks.find(t => t.id === lastMv.truck_id) : null;
+    const driver = lastMv?.driver_id ? drivers.find(d => d.id === lastMv.driver_id) : null;
     const thaan = thaans.find(t => t.batch_id === selectedBatchId);
 
     setLastKnown({
       location: loc?.name || 'Unknown',
       locationType: loc?.type || LocationType.WAREHOUSE,
-      driver: logUnit?.driver_name,
-      truck: logUnit?.truck_plate,
+      driver: driver?.full_name,
+      truck: truck?.plate_number,
       thaanUrl: thaan?.doc_url,
       customerName: loc?.type === LocationType.AT_CUSTOMER ? loc.name : undefined
     });
@@ -116,7 +121,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         setLossType(LossType.MISSING);
         setIsRechargeable(false);
     }
-  }, [selectedBatchId, batches, movements, locations, logistics, thaans]);
+  }, [selectedBatchId, batches, movements, locations, trucks, drivers, thaans]);
 
   const handleReportLoss = async (e: React.FormEvent) => {
     e.preventDefault();

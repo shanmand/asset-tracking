@@ -24,10 +24,16 @@ CREATE TABLE public.locations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.logistics_units (
+CREATE TABLE public.trucks (
     id TEXT PRIMARY KEY,
-    truck_plate TEXT NOT NULL,
-    driver_name TEXT NOT NULL,
+    plate_number TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.drivers (
+    id TEXT PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    contact_number TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -65,7 +71,8 @@ CREATE TABLE public.batch_movements (
     batch_id TEXT REFERENCES public.batches(id),
     from_location_id TEXT REFERENCES public.locations(id),
     to_location_id TEXT REFERENCES public.locations(id),
-    logistics_id TEXT REFERENCES public.logistics_units(id),
+    truck_id TEXT REFERENCES public.trucks(id),
+    driver_id TEXT REFERENCES public.drivers(id),
     condition TEXT DEFAULT 'Clean',
     origin_user_id UUID REFERENCES public.users(id),
     timestamp TIMESTAMPTZ DEFAULT NOW()
@@ -96,7 +103,8 @@ CREATE TABLE public.asset_losses (
 CREATE TABLE public.claims (
     id TEXT PRIMARY KEY,
     batch_id TEXT REFERENCES public.batches(id),
-    driver_id TEXT REFERENCES public.logistics_units(id),
+    truck_id TEXT REFERENCES public.trucks(id),
+    driver_id TEXT REFERENCES public.drivers(id),
     thaan_slip_id UUID REFERENCES public.thaan_slips(id),
     type TEXT NOT NULL, -- Damaged, Dirty
     amount_claimed_zar NUMERIC(12, 2),
@@ -187,7 +195,8 @@ CREATE TRIGGER on_auth_user_created
 -- Enable RLS for all tables
 ALTER TABLE public.asset_master ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.logistics_units ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trucks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fee_schedule ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
@@ -237,6 +246,14 @@ CREATE POLICY "assets_manage" ON public.asset_master FOR ALL TO authenticated US
 -- Locations Policies
 CREATE POLICY "locations_select" ON public.locations FOR SELECT TO authenticated USING (true);
 CREATE POLICY "locations_manage" ON public.locations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Trucks Policies
+CREATE POLICY "trucks_select" ON public.trucks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "trucks_manage" ON public.trucks FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Drivers Policies
+CREATE POLICY "drivers_select" ON public.drivers FOR SELECT TO authenticated USING (true);
+CREATE POLICY "drivers_manage" ON public.drivers FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Users Policies
 CREATE POLICY "users_select" ON public.users FOR SELECT TO authenticated USING (true);
