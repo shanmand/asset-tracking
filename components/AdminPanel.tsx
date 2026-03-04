@@ -116,7 +116,16 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
       ]);
 
       if (feesRes.data) setDbFees(feesRes.data);
-      if (usersRes.data) setDbUsers(usersRes.data);
+      if (usersRes.data) {
+        const mappedUsers = usersRes.data.map((u: any) => ({
+          id: u.id,
+          full_name: u.full_name || 'Unnamed User',
+          email: u.email || '',
+          role_name: u.role_name || UserRole.STAFF,
+          home_branch_name: u.home_branch_name || 'Kya Sands'
+        }));
+        setDbUsers(mappedUsers);
+      }
       if (assetsRes.data) {
         setDbAssets(assetsRes.data);
         if (assetsRes.data.length > 0 && !targetAsset) {
@@ -197,6 +206,24 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
       alert(`Password reset link dispatched for User ID: ${userId}`);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleUpdateUserName = async (userId: string, newName: string) => {
+    if (!isAdmin) return;
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ full_name: newName })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      await fetchData();
+      setNotification({ msg: "User name updated", type: 'success' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to update name", type: 'error' });
+    } finally {
+      setTimeout(() => setNotification(null), 3000);
     }
   };
 
@@ -653,24 +680,34 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {displayUsers.map(user => (
-                    <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                  {displayUsers.map(u => (
+                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-black text-slate-400 border border-slate-200">
-                            {user.name?.charAt(0) || user.id.charAt(0)}
+                            {u.full_name?.charAt(0) || u.id.charAt(0)}
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-slate-800">{user.name || 'Unnamed User'}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{user.id}</p>
+                            <input 
+                              disabled={!isAdmin}
+                              className="text-sm font-bold text-slate-800 bg-transparent border-none focus:ring-1 focus:ring-slate-200 rounded px-1"
+                              value={u.full_name}
+                              onChange={(e) => {
+                                const newName = e.target.value;
+                                setDbUsers(prev => prev.map(item => item.id === u.id ? { ...item, full_name: newName } : item));
+                              }}
+                              onBlur={(e) => handleUpdateUserName(u.id, e.target.value)}
+                            />
+                            <p className="text-[10px] text-slate-400 font-bold">{u.id}</p>
+                            {u.email && <p className="text-[10px] text-blue-500">{u.email}</p>}
                           </div>
                         </div>
                       </td>
                       <td className="px-8 py-5">
                         <select 
                           disabled={!isAdmin}
-                          value={user.role_name || user.role}
-                          onChange={(e) => handleChangeRole(user.id, e.target.value as UserRole)}
+                          value={u.role_name}
+                          onChange={(e) => handleChangeRole(u.id, e.target.value as UserRole)}
                           className="text-[10px] font-bold bg-slate-100 border-none rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-slate-900"
                         >
                           {Object.values(UserRole).map(role => <option key={role} value={role}>{role}</option>)}
@@ -678,12 +715,12 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                       </td>
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                          <Building2 size={12} className="text-slate-400" /> {user.branch_id}
+                          <Building2 size={12} className="text-slate-400" /> {u.home_branch_name}
                         </div>
                       </td>
                       <td className="px-8 py-5 text-right space-x-2">
                         <button 
-                          onClick={() => handleResetPassword(user.id)}
+                          onClick={() => handleResetPassword(u.id)}
                           disabled={!isAdmin}
                           title="Reset Password"
                           className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-all disabled:opacity-30"
@@ -691,7 +728,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                           <Key size={16} />
                         </button>
                         <button 
-                          onClick={() => handleDeleteUser(user.id)}
+                          onClick={() => handleDeleteUser(u.id)}
                           disabled={!isAdmin} 
                           className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all disabled:opacity-30"
                         >

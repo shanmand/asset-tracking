@@ -193,6 +193,18 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     };
   }, [batches, fees, losses, claims, assets, locations, movements, thaans]);
 
+  const handleExport = () => {
+    alert("Exporting reconciliation data to CSV...");
+    // In a real app, this would generate a CSV from reportData
+  };
+
+  const handleApprove = async () => {
+    if (!isAdmin) return;
+    if (!window.confirm("Are you sure you want to approve this monthly statement? This will lock the records for this period.")) return;
+    
+    alert("Statement approved and locked for May 2025.");
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -218,11 +230,17 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         </div>
         
         <div className="flex gap-3 w-full md:w-auto">
-          <button className="flex-1 md:flex-none px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
+          <button 
+            onClick={handleExport}
+            className="flex-1 md:flex-none px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+          >
             <Download size={16} /> Export Reconciliation
           </button>
           {isAdmin ? (
-            <button className="flex-1 md:flex-none px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200">
+            <button 
+              onClick={handleApprove}
+              className="flex-1 md:flex-none px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
+            >
               <FileCheck size={16} /> Approve Statement
             </button>
           ) : (

@@ -48,6 +48,40 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     a.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const [isAdding, setIsAdding] = useState(false);
+  const [newAsset, setNewAsset] = useState<Partial<AssetMaster>>({
+    id: '',
+    name: '',
+    type: 'Crate' as any,
+    dimensions: '',
+    material: ''
+  });
+
+  const handleAddAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('asset_master')
+          .insert([newAsset]);
+        if (error) throw error;
+      }
+      
+      setAssets(prev => [...prev, newAsset as AssetMaster]);
+      setIsAdding(false);
+      setNewAsset({ id: '', name: '', type: 'Crate' as any, dimensions: '', material: '' });
+    } catch (err) {
+      console.error("Add Asset Error:", err);
+      alert("Failed to add asset. Check RLS policies.");
+    } finally {
+      setIsLoading(true); // Trigger refresh
+      window.location.reload(); // Simple refresh to sync fees
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -74,7 +108,10 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
             <Filter size={16} /> Filter
           </button>
           {isAdmin && (
-            <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg transition-all">
+            <button 
+              onClick={() => setIsAdding(true)}
+              className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg transition-all"
+            >
               <Plus size={16} /> New Asset Type
             </button>
           )}
@@ -154,6 +191,81 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
           </tbody>
         </table>
       </div>
+
+      {isAdding && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
+            <div className="p-6 bg-slate-900 text-white">
+              <h3 className="text-lg font-bold">Register New Asset Type</h3>
+              <p className="text-xs text-slate-400">Define a new equipment category for the registry.</p>
+            </div>
+            <form onSubmit={handleAddAsset} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Asset ID (e.g. CRT-01)</label>
+                <input 
+                  required
+                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                  value={newAsset.id}
+                  onChange={e => setNewAsset({...newAsset, id: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Asset Name</label>
+                <input 
+                  required
+                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                  value={newAsset.name}
+                  onChange={e => setNewAsset({...newAsset, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Type</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={newAsset.type}
+                    onChange={e => setNewAsset({...newAsset, type: e.target.value as any})}
+                  >
+                    <option value="Crate">Crate</option>
+                    <option value="Pallet">Pallet</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Material</label>
+                  <input 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={newAsset.material}
+                    onChange={e => setNewAsset({...newAsset, material: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Dimensions</label>
+                <input 
+                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                  value={newAsset.dimensions}
+                  onChange={e => setNewAsset({...newAsset, dimensions: e.target.value})}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsAdding(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold"
+                >
+                  Save Asset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
