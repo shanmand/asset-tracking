@@ -281,6 +281,16 @@ CREATE POLICY "losses_staff" ON public.asset_losses FOR INSERT TO authenticated 
 CREATE POLICY "claims_select" ON public.claims FOR SELECT TO authenticated USING (true);
 CREATE POLICY "claims_staff" ON public.claims FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Logistics Policies
-CREATE POLICY "logistics_select" ON public.logistics_units FOR SELECT TO authenticated USING (true);
-CREATE POLICY "logistics_admin" ON public.logistics_units FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+-- 287: 
+-- 6. SEED DATA
+INSERT INTO public.asset_master (id, name, type, dimensions, material)
+VALUES 
+('SH-001', 'Lupo Standard Bread Crate', 'Crate', '600x400x150mm', 'HDPE-Amber'),
+('SH-P01', 'Heavy Duty Flour Pallet', 'Pallet', '1200x1000mm', 'Reinforced Pine')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.locations (id, name, type, category)
+VALUES 
+('LOC-JHB-01', 'Lupo JHB Main Plant (Kya Sands)', 'Crates Dept', 'Home'),
+('LOC-CPT-01', 'Lupo CPT Distribution Hub', 'Warehouse', 'Home')
+ON CONFLICT (id) DO NOTHING;

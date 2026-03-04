@@ -156,6 +156,9 @@ const BatchManagement: React.FC = () => {
                 <option value="">Select Asset</option>
                 {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
+              {assets.length === 0 && (
+                <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No assets found. Add an asset in the Asset Registry first.</p>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Quantity Received</label>
@@ -179,6 +182,9 @@ const BatchManagement: React.FC = () => {
                 <option value="">Select Location</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)}
               </select>
+              {locations.length === 0 && (
+                <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No locations found. Add a location in the Admin Panel first.</p>
+              )}
             </div>
             <div className="lg:col-span-4 pt-4 border-t border-slate-100">
               <button 
