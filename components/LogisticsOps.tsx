@@ -100,6 +100,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     
     setErrors([]);
     const validationErrors: string[] = [];
+    if (assets.some(a => !a.batchId)) validationErrors.push("Please select a Batch Reference for all items.");
     if (assets.some(a => a.quantity <= 0)) validationErrors.push("All line items must have a quantity > 0.");
     if (origin === destination) validationErrors.push("Origin and Destination cannot be the same.");
     if (!truckId) validationErrors.push("Please select a truck.");
@@ -267,38 +268,53 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Assets & Quantities</span>
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-slate-500 uppercase">Assets & Quantities</span>
+                    <p className="text-[10px] text-slate-400 font-medium">Select batches currently located at the Origin</p>
+                  </div>
                   {!isReadOnly && <button type="button" onClick={handleAddAsset} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase tracking-widest">Add Row</button>}
                 </div>
                 <div className="space-y-3">
-                  {assets.map((a, idx) => (
-                    <div key={idx} className="flex gap-3">
-                      <select 
-                        disabled={isReadOnly}
-                        className="flex-1 border border-slate-200 rounded-xl p-3 text-sm bg-white outline-none"
-                        value={a.batchId}
-                        onChange={e => handleAssetChange(idx, 'batchId', e.target.value)}
-                      >
-                        <option value="">Select Batch Ref</option>
-                        {batches.filter(b => b.current_location_id === origin).map(b => (
-                          <option key={b.id} value={b.id}>{b.id} ({b.quantity} available)</option>
-                        ))}
-                      </select>
-                      <input 
-                        disabled={isReadOnly}
-                        type="number" 
-                        placeholder="Qty"
-                        className="w-32 border border-slate-200 rounded-xl p-3 text-sm bg-white outline-none"
-                        value={a.quantity || ''}
-                        onChange={e => handleAssetChange(idx, 'quantity', parseInt(e.target.value) || 0)}
-                      />
-                      {!isReadOnly && assets.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveAsset(idx)} className="p-3 text-slate-300 hover:text-rose-500">
-                          <X size={18} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  {assets.map((a, idx) => {
+                    const availableBatches = batches.filter(b => b.current_location_id === origin);
+                    return (
+                      <div key={idx} className="flex flex-col gap-2">
+                        <div className="flex gap-3">
+                          <select 
+                            disabled={isReadOnly}
+                            className={`flex-1 border rounded-xl p-3 text-sm bg-white outline-none transition-all ${!a.batchId ? 'border-amber-300 ring-2 ring-amber-50' : 'border-slate-200'}`}
+                            value={a.batchId || ''}
+                            onChange={e => handleAssetChange(idx, 'batchId', e.target.value)}
+                          >
+                            <option value="">Select Batch at Origin</option>
+                            {availableBatches.map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.id} — {assetsMaster.find(am => am.id === b.asset_id)?.name} ({b.quantity} available)
+                              </option>
+                            ))}
+                          </select>
+                          <input 
+                            disabled={isReadOnly}
+                            type="number" 
+                            placeholder="Qty"
+                            className="w-32 border border-slate-200 rounded-xl p-3 text-sm bg-white outline-none"
+                            value={a.quantity || ''}
+                            onChange={e => handleAssetChange(idx, 'quantity', parseInt(e.target.value) || 0)}
+                          />
+                          {!isReadOnly && assets.length > 1 && (
+                            <button type="button" onClick={() => handleRemoveAsset(idx)} className="p-3 text-slate-300 hover:text-rose-500">
+                              <X size={18} />
+                            </button>
+                          )}
+                        </div>
+                        {availableBatches.length === 0 && (
+                          <p className="text-[9px] text-rose-500 font-bold uppercase px-1">
+                            No batches found at this origin. Use "Inventory Intake" to create one.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
