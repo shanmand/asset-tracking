@@ -11,14 +11,55 @@ import {
   ShieldCheck,
   Globe,
   Key,
-  Info
+  Info,
+  LogIn,
+  UserPlus
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { useUser } from '../UserContext';
 
 const SupabaseConnection: React.FC = () => {
+  const { user, refreshProfile } = useUser();
   const [status, setStatus] = useState<'checking' | 'connected' | 'error' | 'unconfigured'>('checking');
   const [latency, setLatency] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Auth Form State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authMsg, setAuthMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAuthLoading(true);
+    setAuthMsg(null);
+    try {
+      const { error } = await (supabase.auth as any).signUp({ email, password });
+      if (error) throw error;
+      setAuthMsg({ msg: "Check your email for the confirmation link!", type: 'success' });
+    } catch (err: any) {
+      setAuthMsg({ msg: err.message || "Sign up failed", type: 'error' });
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAuthLoading(true);
+    setAuthMsg(null);
+    try {
+      const { error } = await (supabase.auth as any).signInWithPassword({ email, password });
+      if (error) throw error;
+      setAuthMsg({ msg: "Signed in successfully!", type: 'success' });
+      await refreshProfile();
+    } catch (err: any) {
+      setAuthMsg({ msg: err.message || "Sign in failed", type: 'error' });
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
 
   const checkConnection = async () => {
     if (!isSupabaseConfigured) {
@@ -99,6 +140,107 @@ const SupabaseConnection: React.FC = () => {
           </div>
           <p className="text-2xl font-black text-slate-900">{latency ? `${latency}ms` : '--'}</p>
           <p className="text-xs text-slate-500 mt-1 font-medium">Round-trip to Postgres</p>
+        </div>
+      </div>
+
+      {/* Auth Section */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-8 bg-slate-900 text-white">
+          <h4 className="text-xl font-black flex items-center gap-2 uppercase tracking-tight">
+            <ShieldCheck size={24} /> Supabase Authentication
+          </h4>
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+            Sign in to your Supabase Auth instance to claim administrative roles
+          </p>
+        </div>
+        
+        <div className="p-8">
+          {user ? (
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-emerald-50 rounded-2xl border border-emerald-100">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center text-white">
+                  <CheckCircle2 size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-slate-900 uppercase tracking-tight">Authenticated as {user.email}</p>
+                  <p className="text-xs text-slate-500 font-medium">Your session is active and linked to your Supabase Auth ID.</p>
+                </div>
+              </div>
+              <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                Session Active
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              <div className="space-y-6">
+                <div>
+                  <h5 className="font-black text-slate-900 uppercase tracking-tight">Sign In / Sign Up</h5>
+                  <p className="text-xs text-slate-500 mt-1">Use your Supabase credentials to access administrative features.</p>
+                </div>
+                
+                <form className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Email Address</label>
+                    <input 
+                      type="email" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                      placeholder="e.g. admin@shuku.co.za"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Password</label>
+                    <input 
+                      type="password" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                    />
+                  </div>
+
+                  {authMsg && (
+                    <div className={`p-4 rounded-xl text-xs font-bold flex items-center gap-2 ${authMsg.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                      {authMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                      {authMsg.msg}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button 
+                      onClick={handleSignIn}
+                      disabled={isAuthLoading || !isSupabaseConfigured}
+                      className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isAuthLoading ? <RefreshCw className="animate-spin" size={14} /> : <LogIn size={14} />}
+                      Sign In
+                    </button>
+                    <button 
+                      onClick={handleSignUp}
+                      disabled={isAuthLoading || !isSupabaseConfigured}
+                      className="flex-1 py-3 bg-white border border-slate-200 text-slate-900 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isAuthLoading ? <RefreshCw className="animate-spin" size={14} /> : <UserPlus size={14} />}
+                      Sign Up
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col justify-center">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-amber-50 text-amber-500 rounded-xl"><Info size={20} /></div>
+                  <h5 className="font-black text-slate-900 uppercase tracking-tight text-xs">Why do I need to sign in?</h5>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  To claim the <strong>System Administrator</strong> role, the system needs to link your database record to a secure Supabase Auth identity. 
+                  <br /><br />
+                  If you haven't created an account yet, use the <strong>Sign Up</strong> button. If you have email confirmation enabled in Supabase, you'll need to check your inbox.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
