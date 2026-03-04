@@ -58,26 +58,34 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         error = retry.error;
       }
 
-      if (error) throw error;
+      if (error) {
+        setProfile({
+          id: userId,
+          full_name: "Guest User",
+          role_name: UserRole.STAFF,
+          home_branch_name: 'Kya Sands',
+          email: user?.email || ''
+        });
+        return;
+      }
 
       const profileData: UserProfile = {
         id: data.id,
-        full_name: data.full_name,
-        role_name: data.role_name as UserRole || UserRole.ADMIN,
+        full_name: data.full_name || 'Unnamed User',
+        role_name: data.role_name as UserRole || UserRole.STAFF,
         home_branch_name: data.home_branch_name || 'Kya Sands',
         email: data.email || user?.email || '',
       };
 
       setProfile(profileData);
     } catch (err) {
-      console.error("Using fallback ADMIN profile (Live DB not connected):", err);
-      // SETTING TO ADMIN BY DEFAULT FOR DEVELOPMENT VISIBILITY
+      console.error("Profile Fetch Error:", err);
       setProfile({
         id: userId,
-        full_name: "Developer (System Admin)",
-        role_name: UserRole.ADMIN,
+        full_name: "Guest User",
+        role_name: UserRole.STAFF,
         home_branch_name: 'Kya Sands',
-        email: 'dev@shuku.co.za'
+        email: user?.email || ''
       });
     }
   };
@@ -88,8 +96,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
       else {
-        // Fallback for no session at all (Development mode)
-        fetchProfile("dev-id");
+        setIsLoading(false);
       }
     });
 

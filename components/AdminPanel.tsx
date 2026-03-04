@@ -55,7 +55,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
 
       const { error } = await supabase
         .from('users')
-        .insert([payload]);
+        .upsert([payload], { onConflict: 'id' });
 
       if (error) {
         if (error.message.includes('column "email" of relation "users" does not exist')) {
@@ -63,7 +63,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           const { id, full_name, role_name, home_branch_name } = payload;
           const { error: retryError } = await supabase
             .from('users')
-            .insert([{ id, full_name, role_name, home_branch_name }]);
+            .upsert([{ id, full_name, role_name, home_branch_name }], { onConflict: 'id' });
           
           if (retryError) throw retryError;
           

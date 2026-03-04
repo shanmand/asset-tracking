@@ -202,27 +202,17 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 DECLARE
-  user_count int;
-  current_user_role text;
+  u_role text;
 BEGIN
-  -- Get the count of users
-  SELECT count(*) INTO user_count FROM public.users;
+  -- 1. Check if ANY users exist. If not, the system is in bootstrap mode.
+  IF NOT EXISTS (SELECT 1 FROM public.users) THEN
+    RETURN TRUE;
+  END IF;
+
+  -- 2. Check the current user's role
+  SELECT role_name INTO u_role FROM public.users WHERE id = auth.uid();
   
-  -- Bootstrap: If no users exist, allow the action
-  IF user_count = 0 THEN
-    RETURN TRUE;
-  END IF;
-
-  -- Get the role of the current authenticated user
-  SELECT role_name INTO current_user_role FROM public.users WHERE id = auth.uid();
-
-  -- If the user is in the table as an admin, allow
-  IF current_user_role = 'System Administrator' THEN
-    RETURN TRUE;
-  END IF;
-
-  -- Also allow if the current user is the ONLY user (emergency recovery)
-  IF user_count = 1 AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid()) THEN
+  IF u_role = 'System Administrator' THEN
     RETURN TRUE;
   END IF;
 
@@ -230,70 +220,50 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
--- Policies for asset_master
-CREATE POLICY "Allow authenticated select on asset_master" ON public.asset_master FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on asset_master" ON public.asset_master FOR ALL TO authenticated USING (public.is_admin());
+-- Clean existing policies
+DO $$ 
+DECLARE 
+    pol record;
+BEGIN
+    FOR pol IN SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public' LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+    END LOOP;
+END $$;
 
--- Policies for locations
-CREATE POLICY "Allow authenticated select on locations" ON public.locations FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on locations" ON public.locations FOR ALL TO authenticated USING (public.is_admin());
+-- Asset Master Policies
+CREATE POLICY "assets_select" ON public.asset_master FOR SELECT TO authenticated USING (true);
+CREATE POLICY "assets_admin" ON public.asset_master FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
--- Policies for logistics_units
-CREATE POLICY "Allow authenticated select on logistics_units" ON public.logistics_units FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on logistics_units" ON public.logistics_units FOR ALL TO authenticated USING (public.is_admin());
+-- Locations Policies
+CREATE POLICY "locations_select" ON public.locations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "locations_admin" ON public.locations FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
--- Policies for users
-DROP POLICY IF EXISTS "Allow authenticated select on users" ON public.users;
-DROP POLICY IF EXISTS "Allow admins full access on users" ON public.users;
+-- Users Policies
+CREATE POLICY "users_select" ON public.users FOR SELECT TO authenticated USING (true);
+CREATE POLICY "users_self_insert" ON public.users FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+CREATE POLICY "users_self_update" ON public.users FOR UPDATE TO authenticated USING (auth.uid() = id);
+CREATE POLICY "users_admin" ON public.users FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
-CREATE POLICY "Allow authenticated select on users" ON public.users 
-    FOR SELECT TO authenticated USING (true);
+-- Fee Schedule Policies
+CREATE POLICY "fees_select" ON public.fee_schedule FOR SELECT TO authenticated USING (true);
+CREATE POLICY "fees_admin" ON public.fee_schedule FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
-CREATE POLICY "Allow users to insert their own profile" ON public.users 
-    FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+-- Batches Policies
+CREATE POLICY "batches_select" ON public.batches FOR SELECT TO authenticated USING (true);
+CREATE POLICY "batches_staff" ON public.batches FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Allow users to update their own profile" ON public.users 
-    FOR UPDATE TO authenticated USING (auth.uid() = id);
+-- Movements Policies
+CREATE POLICY "movements_select" ON public.batch_movements FOR SELECT TO authenticated USING (true);
+CREATE POLICY "movements_staff" ON public.batch_movements FOR INSERT TO authenticated WITH CHECK (true);
 
-CREATE POLICY "Allow admins full access on users" ON public.users 
-    FOR ALL TO authenticated USING (public.is_admin());
+-- Losses Policies
+CREATE POLICY "losses_select" ON public.asset_losses FOR SELECT TO authenticated USING (true);
+CREATE POLICY "losses_staff" ON public.asset_losses FOR INSERT TO authenticated WITH CHECK (true);
 
--- Policies for fee_schedule
-CREATE POLICY "Allow authenticated select on fee_schedule" ON public.fee_schedule FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on fee_schedule" ON public.fee_schedule FOR ALL TO authenticated USING (public.is_admin());
+-- Claims Policies
+CREATE POLICY "claims_select" ON public.claims FOR SELECT TO authenticated USING (true);
+CREATE POLICY "claims_staff" ON public.claims FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Policies for batches
-CREATE POLICY "Allow authenticated select on batches" ON public.batches FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert batches" ON public.batches FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow staff to update batches" ON public.batches FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on batches" ON public.batches FOR ALL TO authenticated USING (public.is_admin());
-
--- Policies for batch_movements
-CREATE POLICY "Allow authenticated select on batch_movements" ON public.batch_movements FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert movements" ON public.batch_movements FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow admins full access on batch_movements" ON public.batch_movements FOR ALL TO authenticated USING (public.is_admin());
-
--- Policies for thaan_slips
-CREATE POLICY "Allow authenticated select on thaan_slips" ON public.thaan_slips FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert thaan_slips" ON public.thaan_slips FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow admins full access on thaan_slips" ON public.thaan_slips FOR ALL TO authenticated USING (public.is_admin());
-
--- Policies for asset_losses
-CREATE POLICY "Allow authenticated select on asset_losses" ON public.asset_losses FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert losses" ON public.asset_losses FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow admins full access on asset_losses" ON public.asset_losses FOR ALL TO authenticated USING (public.is_admin());
-
--- Policies for claims
-CREATE POLICY "Allow authenticated select on claims" ON public.claims FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert/update claims" ON public.claims FOR ALL TO authenticated USING (true);
-CREATE POLICY "Allow admins full access on claims" ON public.claims FOR ALL TO authenticated USING (public.is_admin());
-
--- Policies for claim_audits
-CREATE POLICY "Allow authenticated select on claim_audits" ON public.claim_audits FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert claim_audits" ON public.claim_audits FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow admins full access on claim_audits" ON public.claim_audits FOR ALL TO authenticated USING (public.is_admin());
-
--- Policies for audit_logs
-CREATE POLICY "Allow authenticated select on audit_logs" ON public.audit_logs FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow staff to insert audit_logs" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow admins full access on audit_logs" ON public.audit_logs FOR ALL TO authenticated USING (public.is_admin());
+-- Logistics Policies
+CREATE POLICY "logistics_select" ON public.logistics_units FOR SELECT TO authenticated USING (true);
+CREATE POLICY "logistics_admin" ON public.logistics_units FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
