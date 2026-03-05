@@ -15,7 +15,9 @@ import {
   ExternalLink,
   Lock,
   MoreVertical,
-  ShieldAlert
+  ShieldAlert,
+  Pencil,
+  X
 } from 'lucide-react';
 import { MOCK_LOCATIONS } from '../constants';
 import { LocationType, LocationCategory, Location, UserRole, Branch, PartnerType } from '../types';
@@ -40,6 +42,8 @@ const LocationManagement: React.FC = () => {
 
   // Form State
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingLoc, setEditingLoc] = useState<Location | null>(null);
   const [newLoc, setNewLoc] = useState({
     id: '',
     name: '',
@@ -148,6 +152,63 @@ const LocationManagement: React.FC = () => {
     }
   };
 
+  const handleUpdateLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLoc) return;
+
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('locations')
+          .update({
+            name: editingLoc.name,
+            type: editingLoc.type,
+            category: editingLoc.category,
+            branch_id: editingLoc.branch_id,
+            partner_type: editingLoc.partner_type
+          })
+          .eq('id', editingLoc.id);
+        
+        if (error) throw error;
+      }
+
+      setLocations(prev => prev.map(l => l.id === editingLoc.id ? editingLoc : l));
+      setNotification({ msg: `Location "${editingLoc.name}" updated successfully`, type: 'success' });
+      setIsEditing(false);
+      setEditingLoc(null);
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to update location", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleDeleteLocation = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this location? This action cannot be undone.")) return;
+
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('locations')
+          .delete()
+          .eq('id', id);
+        
+        if (error) throw error;
+      }
+
+      setLocations(prev => prev.filter(l => l.id !== id));
+      setNotification({ msg: "Location deleted successfully", type: 'success' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to delete location", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {schemaError && (
@@ -244,7 +305,7 @@ const LocationManagement: React.FC = () => {
         <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="flex justify-between items-center mb-6">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900">New Location Entry</h4>
-            <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600">Close</button>
+            <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
           </div>
           <form onSubmit={handleCreateLocation} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="space-y-2">
@@ -314,6 +375,83 @@ const LocationManagement: React.FC = () => {
                 className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all"
               >
                 CONFIRM & PERSIST LOCATION
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {isEditing && editingLoc && (
+        <div className="bg-white p-8 rounded-3xl border-2 border-amber-500 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="flex justify-between items-center mb-6">
+            <h4 className="font-black text-sm uppercase tracking-widest text-slate-900">Edit Location: {editingLoc.id}</h4>
+            <button onClick={() => { setIsEditing(false); setEditingLoc(null); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+          </div>
+          <form onSubmit={handleUpdateLocation} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Friendly Name</label>
+              <input 
+                required
+                placeholder="e.g. Durban North Depot"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={editingLoc.name}
+                onChange={e => setEditingLoc({...editingLoc, name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Location Type</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={editingLoc.type}
+                onChange={e => setEditingLoc({...editingLoc, type: e.target.value as LocationType})}
+              >
+                {Object.values(LocationType).map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Category</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={editingLoc.category}
+                onChange={e => setEditingLoc({...editingLoc, category: e.target.value as LocationCategory})}
+              >
+                {Object.values(LocationCategory).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Partner Type</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={editingLoc.partner_type}
+                onChange={e => setEditingLoc({...editingLoc, partner_type: e.target.value as PartnerType})}
+              >
+                {Object.values(PartnerType).map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Allocation</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={editingLoc.branch_id}
+                onChange={e => setEditingLoc({...editingLoc, branch_id: e.target.value})}
+              >
+                <option value="">Unallocated</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div className="lg:col-span-3 pt-4 border-t border-slate-100 flex gap-4">
+              <button 
+                type="button"
+                onClick={() => { setIsEditing(false); setEditingLoc(null); }}
+                className="flex-1 bg-slate-100 text-slate-600 font-black py-4 rounded-2xl hover:bg-slate-200 transition-all"
+              >
+                CANCEL
+              </button>
+              <button 
+                type="submit"
+                className="flex-[2] bg-amber-500 text-white font-black py-4 rounded-2xl hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
+              >
+                UPDATE & PERSIST CHANGES
               </button>
             </div>
           </form>
@@ -399,9 +537,22 @@ const LocationManagement: React.FC = () => {
                      </div>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    <button className="p-2.5 bg-slate-50 rounded-xl text-slate-300 hover:text-slate-900 transition-all">
-                      <MoreVertical size={18} />
-                    </button>
+                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => { setEditingLoc(loc); setIsEditing(true); setIsAdding(false); }}
+                        className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-amber-600 hover:border-amber-200 transition-all shadow-sm"
+                        title="Edit Location"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteLocation(loc.id)}
+                        className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm"
+                        title="Delete Location"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
