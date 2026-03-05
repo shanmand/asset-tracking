@@ -293,7 +293,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     value={destination}
                     onChange={e => setDestination(e.target.value)}
                   >
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    <optgroup label="Internal Facilities">
+                      {locations.filter(l => l.category === 'Home').map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </optgroup>
+                    <optgroup label="Customers & Partners">
+                      {locations.filter(l => l.category === 'External' && l.type !== LocationType.IN_TRANSIT).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </optgroup>
+                    <optgroup label="Trucks (In-Transit)">
+                      {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </optgroup>
                   </select>
                 </label>
               </div>

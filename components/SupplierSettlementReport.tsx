@@ -105,14 +105,18 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
   const reportData = useMemo(() => {
     // 1. Rental Reconciliation
     const rentals = batches.filter(b => {
-        const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
+        const asset = assets.find(a => a.id === b.asset_id);
         const loc = locations.find(l => l.id === b.current_location_id);
+        const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
         
         const matchesBranch = selectedBranch === 'all' || loc?.branch_id === selectedBranch;
         const matchesDate = (!startDate || new Date(b.created_at) >= new Date(startDate)) &&
                            (!endDate || new Date(b.created_at) <= new Date(endDate));
 
-        return !!fee && matchesBranch && matchesDate;
+        // Logic: External Assets at External Locations are removed from our account
+        const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
+
+        return !!fee && matchesBranch && matchesDate && isOurAccount;
     }).map(b => {
         const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
         const loss = losses.find(l => l.batch_id === b.id);

@@ -18,6 +18,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   const [dbUsers, setDbUsers] = useState<DBUser[]>([]);
   const [dbAssets, setDbAssets] = useState<AssetMaster[]>([]);
   const [dbClaims, setDbClaims] = useState<Claim[]>([]);
+  const [dbBranches, setDbBranches] = useState<{id: string, name: string}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Supabase Real-time Dashboard Fetch
@@ -30,31 +31,21 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         setDbUsers([]);
         setDbAssets([]);
         setDbClaims([]);
+        setDbBranches([]);
         setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       try {
-        // 1. Fetch movement_batches (batches) with branch filter
-        let batchQuery = supabase.from('batches').select('*');
-        
-        if (branchContext !== 'Consolidated') {
-          const branchMapping = {
-            'Kya Sands': 'LOC-JHB-01',
-            'Durban': 'LOC-DBN-01'
-          };
-          const targetBranchId = branchMapping[branchContext as keyof typeof branchMapping];
-          batchQuery = batchQuery.eq('current_location_id', targetBranchId);
-        }
-        
-        const [batchesRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes] = await Promise.all([
-          batchQuery,
+        const [batchesRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes, branchesRes] = await Promise.all([
+          supabase.from('batches').select('*'),
           supabase.from('asset_losses').select('*'),
           supabase.from('locations').select('*'),
           supabase.from('users').select('*'),
           supabase.from('asset_master').select('*'),
-          supabase.from('claims').select('*')
+          supabase.from('claims').select('*'),
+          supabase.from('branches').select('*')
         ]);
 
         if (batchesRes.data) setDbBatches(batchesRes.data);
@@ -63,6 +54,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         if (usersRes.data) setDbUsers(usersRes.data);
         if (assetsRes.data) setDbAssets(assetsRes.data);
         if (claimsRes.data) setDbClaims(claimsRes.data);
+        if (branchesRes.data) setDbBranches(branchesRes.data);
 
       } catch (err) {
         console.error("Dashboard Sync Error:", err);
@@ -72,9 +64,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     };
 
     fetchDashboardData();
-  }, [branchContext]);
+  }, []);
 
-  // Merge DB data with MOCK for UI robustness
   const displayBatches = dbBatches;
   const displayLosses = dbLosses;
   const displayLocations = dbLocations;
@@ -82,26 +73,77 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   const displayAssets = dbAssets;
   const displayClaims = dbClaims;
 
+  const currentBranchId = useMemo(() => {
+    if (branchContext === 'Consolidated') return null;
+    return dbBranches.find(b => b.name.includes(branchContext))?.id;
+  }, [branchContext, dbBranches]);
+
   const filteredBatches = useMemo(() => {
-    if (branchContext === 'Consolidated') return displayBatches;
-    const branchName = branchContext === 'Kya Sands' ? 'Kya Sands' : 'KZN';
-    return displayBatches.filter(b => {
+    let base = displayBatches;
+    
+    // Apply Branch Filter
+    if (currentBranchId) {
+      base = base.filter(b => {
         const loc = displayLocations.find(l => l.id === b.current_location_id);
-        return loc?.name.includes(branchName);
+        return loc?.branch_id === currentBranchId;
+      });
+    }
+
+    // Apply "Our Account" Logic:
+    // Crates transferred to QSR/Supermarket (External Locations) and are CHEP/Pallets (External Assets) 
+    // need to be removed from our account.
+    return base.filter(b => {
+      const asset = displayAssets.find(a => a.id === b.asset_id);
+      const loc = displayLocations.find(l => l.id === b.current_location_id);
+      
+      if (asset?.ownership_type === 'External' && loc?.category === 'External') {
+        return false; // Remove from our account
+      }
+      return true;
     });
-  }, [branchContext, displayBatches, displayLocations]);
+  }, [currentBranchId, displayBatches, displayLocations, displayAssets]);
 
   const filteredLosses = useMemo(() => {
-    if (branchContext === 'Consolidated') return displayLosses;
-    const branchName = branchContext === 'Kya Sands' ? 'Kya Sands' : 'KZN';
-    return displayLosses.filter(l => {
+    let base = displayLosses;
+    if (currentBranchId) {
+      base = base.filter(l => {
         const loc = displayLocations.find(loc => loc.id === l.last_known_location_id);
-        return loc?.name.includes(branchName);
-    });
-  }, [branchContext, displayLosses, displayLocations]);
+        return loc?.branch_id === currentBranchId;
+      });
+    }
+    return base;
+  }, [currentBranchId, displayLosses, displayLocations]);
 
-  const totalPallets = filteredBatches.reduce((acc, b) => b.asset_id.includes('P') ? acc + b.quantity : acc, 0);
-  const estimatedUnbilledRental = filteredBatches.length * 145.20; 
+  const avgTurnaround = useMemo(() => {
+    if (filteredBatches.length === 0) return 0;
+    const now = new Date().getTime();
+    const totalDays = filteredBatches.reduce((acc, b) => {
+      const created = new Date(b.created_at).getTime();
+      const diff = (now - created) / (1000 * 60 * 60 * 24);
+      return acc + diff;
+    }, 0);
+    return totalDays / filteredBatches.length;
+  }, [filteredBatches]);
+
+  const totalPallets = filteredBatches.reduce((acc, b) => {
+    const asset = displayAssets.find(a => a.id === b.asset_id);
+    return asset?.type === 'Pallet' ? acc + b.quantity : acc;
+  }, 0);
+
+  const estimatedUnbilledRental = useMemo(() => {
+    // Rental only for External Assets at Home Locations
+    return filteredBatches.reduce((acc, b) => {
+      const asset = displayAssets.find(a => a.id === b.asset_id);
+      const loc = displayLocations.find(l => l.id === b.current_location_id);
+      
+      if (asset?.ownership_type === 'External' && loc?.category === 'Home') {
+        // Mock rate: R 5.15 per unit per day (approx)
+        return acc + (b.quantity * 5.15 * 30); 
+      }
+      return acc;
+    }, 0);
+  }, [filteredBatches, displayAssets, displayLocations]);
+
   const pendingClaimsValue = displayClaims.filter(c => c.status === 'Lodged').reduce((acc, c) => acc + c.amount_claimed_zar, 0);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -211,7 +253,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         />
         <StatCard 
           label="Avg Turnaround" 
-          value="0.0 Days" 
+          value={`${avgTurnaround.toFixed(1)} Days`} 
           trend="0%" 
           trendUp={true} 
           icon={<TrendingUp className="text-emerald-500" />} 

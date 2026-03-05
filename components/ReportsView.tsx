@@ -73,7 +73,10 @@ const ReportsView: React.FC = () => {
                            asset?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            loc?.name.toLowerCase().includes(searchQuery.toLowerCase());
 
-      return matchesBranch && matchesPartner && matchesAsset && matchesSearch;
+      // "Our Account" Logic: External Assets at External Locations are removed from our account
+      const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
+
+      return matchesBranch && matchesPartner && matchesAsset && matchesSearch && isOurAccount;
     });
   }, [batches, locations, assets, selectedBranch, selectedPartnerType, selectedAssetType, searchQuery]);
 
