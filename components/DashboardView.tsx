@@ -9,9 +9,10 @@ interface DashboardViewProps {
   currentUser: UserType;
   branchContext?: 'Kya Sands' | 'Durban' | 'Consolidated';
   onDrillDown?: () => void;
+  onSchemaFix?: () => void;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated', onDrillDown }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated', onDrillDown, onSchemaFix }) => {
   const [dbBatches, setDbBatches] = useState<Batch[]>([]);
   const [dbLosses, setDbLosses] = useState<AssetLoss[]>([]);
   const [dbLocations, setDbLocations] = useState<Location[]>([]);
@@ -19,6 +20,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   const [dbAssets, setDbAssets] = useState<AssetMaster[]>([]);
   const [dbClaims, setDbClaims] = useState<Claim[]>([]);
   const [dbBranches, setDbBranches] = useState<{id: string, name: string}[]>([]);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Supabase Real-time Dashboard Fetch
@@ -54,7 +56,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         if (usersRes.data) setDbUsers(usersRes.data);
         if (assetsRes.data) setDbAssets(assetsRes.data);
         if (claimsRes.data) setDbClaims(claimsRes.data);
-        if (branchesRes.data) setDbBranches(branchesRes.data);
+        
+        // Handle branches with fallback
+        if (branchesRes.error) {
+          setSchemaError("Missing 'branches' table or 'branch_id' column. Please run SQL migrations.");
+          setDbBranches([]);
+        } else if (branchesRes.data) {
+          setDbBranches(branchesRes.data);
+        }
 
       } catch (err) {
         console.error("Dashboard Sync Error:", err);
@@ -161,6 +170,26 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {schemaError && (
+        <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex items-center justify-between gap-6 shadow-xl shadow-amber-100/50">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Database Schema Out of Sync</h4>
+              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1">{schemaError}</p>
+            </div>
+          </div>
+          <button 
+            onClick={onSchemaFix}
+            className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
+          >
+            Go to SQL Migrations
+          </button>
+        </div>
+      )}
+
       {/* Manager Oversight - Accountability for Losses */}
       {(currentUser.role === UserRole.MANAGER || currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.EXECUTIVE) && (
         <div className="bg-white rounded-3xl shadow-xl shadow-slate-200 border border-slate-200 overflow-hidden ring-4 ring-slate-50 transition-all">

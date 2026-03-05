@@ -51,7 +51,12 @@ const ReportsView: React.FC = () => {
         if (bRes.data) setBatches(bRes.data);
         if (lRes.data) setLocations(lRes.data);
         if (aRes.data) setAssets(aRes.data);
-        if (brRes.data) setBranches(brRes.data);
+        
+        if (brRes.data) {
+          setBranches(brRes.data);
+        } else {
+          setBranches([]);
+        }
       } catch (err) {
         console.error("Reports Fetch Error:", err);
       } finally {

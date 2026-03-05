@@ -10,7 +10,7 @@ import {
   MOCK_MOVEMENTS,
   MOCK_THAANS 
 } from '../constants';
-import { FeeType, LocationType, LossType, Batch, FeeSchedule, AssetLoss, Claim, AssetMaster, Location, BatchMovement, ThaanSlip } from '../types';
+import { FeeType, LocationType, LossType, Batch, FeeSchedule, AssetLoss, Claim, AssetMaster, Location, BatchMovement, ThaanSlip, Branch } from '../types';
 import { 
   Receipt, 
   TrendingUp, 
@@ -45,6 +45,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
   const [locations, setLocations] = useState<Location[]>([]);
   const [movements, setMovements] = useState<BatchMovement[]>([]);
   const [thaans, setThaans] = useState<ThaanSlip[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -73,7 +74,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
 
       setIsLoading(true);
       try {
-        const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes] = await Promise.all([
+        const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes, brRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('asset_losses').select('*'),
@@ -81,7 +82,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
           supabase.from('asset_master').select('*'),
           supabase.from('locations').select('*'),
           supabase.from('batch_movements').select('*'),
-          supabase.from('thaan_slips').select('*')
+          supabase.from('thaan_slips').select('*'),
+          supabase.from('branches').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);
@@ -92,6 +94,13 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         if (locRes.data) setLocations(locRes.data);
         if (mRes.data) setMovements(mRes.data);
         if (tRes.data) setThaans(tRes.data);
+        
+        // Handle branches with fallback
+        if (brRes.data) {
+          setBranches(brRes.data);
+        } else {
+          setBranches([]);
+        }
       } catch (err) {
         console.error("Settlement Fetch Error:", err);
       } finally {

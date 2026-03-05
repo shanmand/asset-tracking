@@ -31,6 +31,7 @@ const LocationManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All Categories');
+  const [schemaError, setSchemaError] = useState<boolean>(false);
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
   // Branch Form State
@@ -62,10 +63,16 @@ const LocationManagement: React.FC = () => {
       ]);
 
       if (locsRes.error) throw locsRes.error;
-      if (branchesRes.error) throw branchesRes.error;
 
       if (locsRes.data) setLocations(locsRes.data);
-      if (branchesRes.data) setBranches(branchesRes.data);
+      
+      // Handle branches with fallback
+      if (branchesRes.error) {
+        setSchemaError(true);
+        setBranches([]);
+      } else if (branchesRes.data) {
+        setBranches(branchesRes.data);
+      }
     } catch (err: any) {
       console.error("Failed to fetch data:", err);
     } finally {
@@ -143,6 +150,23 @@ const LocationManagement: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {schemaError && (
+        <div className="bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl flex items-center justify-between gap-6 shadow-xl shadow-rose-100/50">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-rose-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+              <ShieldAlert size={24} />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Branch Management Disabled</h4>
+              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1">The 'branches' table or 'branch_id' column is missing from your database schema.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-rose-600 font-black text-[10px] uppercase tracking-widest">
+            <AlertTriangle size={14} /> Run SQL Migrations to Fix
+          </div>
+        </div>
+      )}
+
       {notification && (
         <div className={`fixed bottom-8 right-8 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-right ${notification.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
           {notification.type === 'success' ? <CheckCircle2 size={24} /> : <AlertTriangle size={24} />}

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Database, Table as TableIcon, Calculator, ShieldCheck, Zap, Receipt, Lock, Globe, History, MapPin, Truck, FileText, AlertTriangle, TrendingUp, Info, CheckCircle2, Terminal } from 'lucide-react';
 
 const SchemaView: React.FC = () => {
-  const [activeView, setActiveView] = useState<'visual' | 'sql' | 'python' | 'simulator' | 'postgres' | 'rbac' | 'backend' | 'scenario'>('scenario');
+  const [activeView, setActiveView] = useState<'visual' | 'sql' | 'python' | 'simulator' | 'postgres' | 'rbac' | 'backend' | 'scenario' | 'migrations'>('scenario');
   
   // Simulator State
   const [simCondition, setSimCondition] = useState<'Clean' | 'Damaged'>('Clean');
@@ -15,12 +15,13 @@ const SchemaView: React.FC = () => {
   const entities = [
     { name: 'AssetMaster', fields: ['id', 'name', 'type', 'dimensions', 'material'] },
     { name: 'FeeSchedule', fields: ['id', 'asset_id (FK)', 'fee_type', 'amount_zar', 'effective_from', 'effective_to'] },
-    { name: 'Locations', fields: ['id', 'name', 'type', 'category (Home/External)'] },
+    { name: 'Locations', fields: ['id', 'name', 'type', 'category (Home/External)', 'branch_id (FK)', 'partner_type'] },
     { name: 'Batches', fields: ['id', 'asset_id (FK)', 'quantity', 'current_location_id (FK)', 'created_at', 'status'] },
     { name: 'AssetLosses', fields: ['id', 'batch_id (FK)', 'loss_type', 'lost_qty', 'last_known_loc_id', 'timestamp', 'reported_by (FK)', 'notes'] },
     { name: 'BatchVerifications', fields: ['id', 'batch_id (FK)', 'verified_by (FK)', 'received_qty', 'expected_qty', 'variance', 'timestamp'] },
     { name: 'Claims', fields: ['id', 'batch_id (FK)', 'driver_id (FK)', 'thaan_slip_id (FK)', 'status', 'created_at', 'settled_at'] },
-    { name: 'Users', fields: ['id', 'name', 'role', 'branch_id'] }
+    { name: 'Users', fields: ['id', 'name', 'role', 'branch_id'] },
+    { name: 'Branches', fields: ['id', 'name', 'created_at'] }
   ];
 
   const calculateSimLiability = () => {
@@ -45,6 +46,7 @@ const SchemaView: React.FC = () => {
           <TabButton active={activeView === 'scenario'} onClick={() => setActiveView('scenario')} label="Lifecycle Walkthrough" />
           <TabButton active={activeView === 'visual'} onClick={() => setActiveView('visual')} label="Visual Diagram" />
           <TabButton active={activeView === 'postgres'} onClick={() => setActiveView('postgres')} label="Postgres Workflow" />
+          <TabButton active={activeView === 'migrations'} onClick={() => setActiveView('migrations')} label="SQL Migrations" />
           <TabButton active={activeView === 'backend'} onClick={() => setActiveView('backend')} label="Backend Logic" />
           <TabButton active={activeView === 'simulator'} onClick={() => setActiveView('simulator')} label="Accrual Simulator" />
         </div>
@@ -173,6 +175,61 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;`}
             </pre>
+          </div>
+        </div>
+      )}
+
+      {activeView === 'migrations' && (
+        <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="bg-slate-900 rounded-3xl p-10 border border-slate-800 font-mono text-xs overflow-x-auto space-y-8">
+            <div className="text-amber-400 flex items-center gap-3 border-b border-slate-800 pb-4">
+              <Terminal size={20} />
+              <span className="font-black tracking-widest uppercase">Required Schema Updates (Run in Supabase SQL Editor)</span>
+            </div>
+            <pre className="text-slate-300 leading-relaxed">
+{`-- 1. Create Branches Table
+CREATE TABLE IF NOT EXISTS public.branches (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. Add branch_id to Locations
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='locations' AND column_name='branch_id') THEN
+        ALTER TABLE public.locations ADD COLUMN branch_id TEXT REFERENCES public.branches(id);
+    END IF;
+END $$;
+
+-- 3. Add partner_type to Locations
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='locations' AND column_name='partner_type') THEN
+        ALTER TABLE public.locations ADD COLUMN partner_type TEXT DEFAULT 'Internal';
+    END IF;
+END $$;
+
+-- 4. Enable RLS for Branches
+ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
+
+-- 5. Create RLS Policy for Branches
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'branches' AND policyname = 'Allow public read access') THEN
+        CREATE POLICY "Allow public read access" ON public.branches FOR SELECT USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'branches' AND policyname = 'Allow admin insert') THEN
+        CREATE POLICY "Allow admin insert" ON public.branches FOR INSERT WITH CHECK (true);
+    END IF;
+END $$;`}
+            </pre>
+            <div className="p-4 bg-amber-900/20 border border-amber-900/50 rounded-xl flex gap-4">
+              <AlertTriangle className="text-amber-500 shrink-0" size={24} />
+              <p className="text-xs text-amber-200 font-medium leading-relaxed">
+                <strong>Deployment Note:</strong> Copy and paste the SQL above into your Supabase SQL Editor to fix the "table not found" and "column not found" errors. After running, refresh your browser.
+              </p>
+            </div>
           </div>
         </div>
       )}
