@@ -8,9 +8,10 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 interface DashboardViewProps {
   currentUser: UserType;
   branchContext?: 'Kya Sands' | 'Durban' | 'Consolidated';
+  onDrillDown?: () => void;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated' }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated', onDrillDown }) => {
   const [dbBatches, setDbBatches] = useState<Batch[]>([]);
   const [dbLosses, setDbLosses] = useState<AssetLoss[]>([]);
   const [dbLocations, setDbLocations] = useState<Location[]>([]);
@@ -254,7 +255,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
               </div>
             </div>
             
-            <button className="w-full mt-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
+            <button 
+              onClick={onDrillDown}
+              className="w-full mt-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+            >
               <TrendingUp size={14} /> View Historical Drill-down
             </button>
           </div>

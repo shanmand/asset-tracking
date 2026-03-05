@@ -1,4 +1,4 @@
-import { AssetMaster, AssetType, FeeSchedule, FeeType, Location, LocationType, LocationCategory, Truck, Driver, Batch, BatchMovement, MovementCondition, ThaanSlip, Claim, ClaimAudit, InventoryRecord, AssetLoss, LossType, AuditLog, UserRole, User } from './types';
+import { AssetMaster, AssetType, FeeSchedule, FeeType, Location, LocationType, LocationCategory, Truck, Driver, Batch, BatchMovement, MovementCondition, ThaanSlip, Claim, ClaimAudit, InventoryRecord, AssetLoss, LossType, AuditLog, UserRole, User, BillingModel, OwnershipType, PartnerType } from './types';
 
 export const MOCK_TRUCKS: Truck[] = [
   { id: 'TRK-001', plate_number: 'GP 22 SH', model: 'Hino 300', capacity: 4000 },
@@ -20,24 +20,24 @@ export const MOCK_USERS: User[] = [
 ];
 
 export const MOCK_ASSETS: AssetMaster[] = [
-  { id: 'SH-001', name: 'Lupo Standard Bread Crate', type: AssetType.CRATE, dimensions: '600x400x150mm', material: 'HDPE-Amber' },
-  { id: 'SH-002', name: 'Lupo Confectionery Tray', type: AssetType.CRATE, dimensions: '600x400x90mm', material: 'HDPE-Clear' },
-  { id: 'SH-003', name: 'Lupo Roll Crate (Deep)', type: AssetType.CRATE, dimensions: '600x400x210mm', material: 'HDPE-Blue' },
-  { id: 'SH-P01', name: 'Heavy Duty Flour Pallet', type: AssetType.PALLET, dimensions: '1200x1000mm', material: 'Reinforced Pine' },
-  { id: 'SH-P02', name: 'Lupo Export Euro Pallet', type: AssetType.PALLET, dimensions: '1200x800mm', material: 'Heat-Treated Wood' },
+  { id: 'SH-001', name: 'Lupo Standard Bread Crate', type: AssetType.CRATE, dimensions: '600x400x150mm', material: 'HDPE-Amber', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL },
+  { id: 'SH-002', name: 'Lupo Confectionery Tray', type: AssetType.CRATE, dimensions: '600x400x90mm', material: 'HDPE-Clear', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL },
+  { id: 'SH-003', name: 'Lupo Roll Crate (Deep)', type: AssetType.CRATE, dimensions: '600x400x210mm', material: 'HDPE-Blue', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL },
+  { id: 'SH-P01', name: 'Heavy Duty Flour Pallet', type: AssetType.PALLET, dimensions: '1200x1000mm', material: 'Reinforced Pine', billing_model: BillingModel.ISSUE_FEE, ownership_type: OwnershipType.EXTERNAL },
+  { id: 'SH-P02', name: 'Lupo Export Euro Pallet', type: AssetType.PALLET, dimensions: '1200x800mm', material: 'Heat-Treated Wood', billing_model: BillingModel.ISSUE_FEE, ownership_type: OwnershipType.EXTERNAL },
 ];
 
 export const MOCK_LOCATIONS: Location[] = [
-  { id: 'LOC-JHB-01', name: 'Lupo JHB Main Plant (Kya Sands)', type: LocationType.CRATES_DEPT, category: LocationCategory.HOME },
-  { id: 'LOC-CPT-01', name: 'Lupo CPT Distribution Hub', type: LocationType.WAREHOUSE, category: LocationCategory.HOME },
-  { id: 'LOC-DBN-01', name: 'Lupo KZN Depot', type: LocationType.WAREHOUSE, category: LocationCategory.HOME },
-  { id: 'LOC-CUST-01', name: 'Pick n Pay Hyper Woodmead', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL },
-  { id: 'LOC-CUST-02', name: 'Spar Kyalami', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL },
-  { id: 'LOC-CUST-03', name: 'Checkers Sandton', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL },
-  { id: 'LOC-TRANS-01', name: 'Truck GP 22 SH (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL },
-  { id: 'LOC-TRANS-02', name: 'Truck CA 99 LU (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL },
-  { id: 'LOC-SUP-01', name: 'SHUKU Asset Recovery Yard', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL },
-  { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL },
+  { id: 'LOC-JHB-01', name: 'Lupo JHB Main Plant (Kya Sands)', type: LocationType.CRATES_DEPT, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-CPT-01', name: 'Lupo CPT Distribution Hub', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-DBN-01', name: 'Lupo KZN Depot', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-CUST-01', name: 'Pick n Pay Hyper Woodmead', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
+  { id: 'LOC-CUST-02', name: 'Spar Kyalami', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
+  { id: 'LOC-CUST-03', name: 'Checkers Sandton', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
+  { id: 'LOC-TRANS-01', name: 'Truck GP 22 SH (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-TRANS-02', name: 'Truck CA 99 LU (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-SUP-01', name: 'SHUKU Asset Recovery Yard', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL, partner_type: PartnerType.SUPPLIER },
+  { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
 ];
 
 export const MOCK_FEES: FeeSchedule[] = [

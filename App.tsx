@@ -45,6 +45,7 @@ import SupabaseConnection from './components/SupabaseConnection';
 import AdminPanel from './components/AdminPanel';
 import LogisticsRegistry from './components/LogisticsRegistry';
 import BatchManagement from './components/BatchManagement';
+import ReportsView from './components/ReportsView';
 import { UserRole } from './types';
 import { supabase } from './supabase';
 
@@ -64,7 +65,8 @@ enum NavItem {
   CONNECT = 'connect',
   ADMIN = 'admin-panel',
   LOGISTICS_REGISTRY = 'logistics-registry',
-  BATCH_MANAGEMENT = 'batch-management'
+  BATCH_MANAGEMENT = 'batch-management',
+  REPORTS = 'reports'
 }
 
 const AppContent: React.FC = () => {
@@ -90,7 +92,7 @@ const AppContent: React.FC = () => {
   const renderContent = () => {
     // Explicit module rendering
     switch (activeTab) {
-      case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} />;
+      case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
       case NavItem.INVENTORY: return <InventoryDashboard />;
       case NavItem.FINANCIALS: return <FinancialReport branchContext={currentBranchContext as any} />;
       case NavItem.SETTLEMENT: return <SupplierSettlementReport isAdmin={profile?.role_name === UserRole.ADMIN} />;
@@ -106,7 +108,8 @@ const AppContent: React.FC = () => {
       case NavItem.ADMIN: return <AdminPanel currentRole={profile?.role_name || UserRole.ADMIN} />;
       case NavItem.LOGISTICS_REGISTRY: return <LogisticsRegistry />;
       case NavItem.BATCH_MANAGEMENT: return <BatchManagement />;
-      default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.REPORTS: return <ReportsView />;
+      default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
 
@@ -121,6 +124,7 @@ const AppContent: React.FC = () => {
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           <div className="pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Main Modules</div>
           <SidebarButton active={activeTab === NavItem.DASHBOARD} onClick={() => setActiveTab(NavItem.DASHBOARD)} icon={<LayoutDashboard size={18} />} label="Dashboard" />
+          <SidebarButton active={activeTab === NavItem.REPORTS} onClick={() => setActiveTab(NavItem.REPORTS)} icon={<BarChart3 size={18} />} label="Logistics Intelligence" />
           <SidebarButton active={activeTab === NavItem.INVENTORY} onClick={() => setActiveTab(NavItem.INVENTORY)} icon={<Globe size={18} />} label="Inventory Map" />
           <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<History size={18} />} label="Batch Forensic" />
 

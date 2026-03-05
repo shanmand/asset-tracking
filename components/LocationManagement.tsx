@@ -18,7 +18,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { MOCK_LOCATIONS } from '../constants';
-import { LocationType, LocationCategory, Location, UserRole } from '../types';
+import { LocationType, LocationCategory, Location, UserRole, Branch, PartnerType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
 
@@ -27,10 +27,15 @@ const LocationManagement: React.FC = () => {
   const isAdmin = profile?.role_name === UserRole.ADMIN;
 
   const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All Categories');
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+
+  // Branch Form State
+  const [isAddingBranch, setIsAddingBranch] = useState(false);
+  const [newBranch, setNewBranch] = useState({ id: '', name: '' });
 
   // Form State
   const [isAdding, setIsAdding] = useState(false);
@@ -38,10 +43,12 @@ const LocationManagement: React.FC = () => {
     id: '',
     name: '',
     type: LocationType.WAREHOUSE,
-    category: LocationCategory.EXTERNAL
+    category: LocationCategory.EXTERNAL,
+    branch_id: '',
+    partner_type: PartnerType.INTERNAL
   });
 
-  const fetchLocations = async () => {
+  const fetchData = async () => {
     if (!isSupabaseConfigured) {
       setLocations(MOCK_LOCATIONS);
       return;
@@ -49,22 +56,25 @@ const LocationManagement: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('locations')
-        .select('*');
+      const [locsRes, branchesRes] = await Promise.all([
+        supabase.from('locations').select('*'),
+        supabase.from('branches').select('*')
+      ]);
 
-      if (error) throw error;
-      if (data) setLocations(data);
-      else setLocations([]);
+      if (locsRes.error) throw locsRes.error;
+      if (branchesRes.error) throw branchesRes.error;
+
+      if (locsRes.data) setLocations(locsRes.data);
+      if (branchesRes.data) setBranches(branchesRes.data);
     } catch (err: any) {
-      console.error("Failed to fetch locations:", err);
+      console.error("Failed to fetch data:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLocations();
+    fetchData();
   }, []);
 
   const filteredLocations = useMemo(() => {
@@ -79,9 +89,28 @@ const LocationManagement: React.FC = () => {
     });
   }, [locations, searchQuery, categoryFilter]);
 
+  const handleCreateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.from('branches').insert([newBranch]);
+        if (error) throw error;
+      }
+      setBranches(prev => [...prev, newBranch as Branch]);
+      setNotification({ msg: `Branch "${newBranch.name}" created`, type: 'success' });
+      setIsAddingBranch(false);
+      setNewBranch({ id: '', name: '' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to create branch", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Removed isAdmin restriction to prevent total lockout
     
     setIsLoading(true);
     try {
@@ -93,10 +122,17 @@ const LocationManagement: React.FC = () => {
         if (error) throw error;
       }
 
-      setLocations(prev => [...prev, newLoc]);
+      setLocations(prev => [...prev, newLoc as Location]);
       setNotification({ msg: `Location "${newLoc.name}" created successfully`, type: 'success' });
       setIsAdding(false);
-      setNewLoc({ id: '', name: '', type: LocationType.WAREHOUSE, category: LocationCategory.EXTERNAL });
+      setNewLoc({ 
+        id: '', 
+        name: '', 
+        type: LocationType.WAREHOUSE, 
+        category: LocationCategory.EXTERNAL,
+        branch_id: '',
+        partner_type: PartnerType.INTERNAL
+      });
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to create location", type: 'error' });
     } finally {
@@ -121,10 +157,16 @@ const LocationManagement: React.FC = () => {
         </div>
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <button 
-            onClick={fetchLocations}
+            onClick={fetchData}
             className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
           >
             <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button 
+            onClick={() => setIsAddingBranch(true)}
+            className="px-6 py-3 bg-white border border-slate-200 text-slate-900 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
+          >
+            <Plus size={18} /> ADD BRANCH
           </button>
           <button 
             onClick={() => setIsAdding(true)}
@@ -135,13 +177,52 @@ const LocationManagement: React.FC = () => {
         </div>
       </div>
 
+      {isAddingBranch && (
+        <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="flex justify-between items-center mb-6">
+            <h4 className="font-black text-sm uppercase tracking-widest text-slate-900">New Branch Entry</h4>
+            <button onClick={() => setIsAddingBranch(false)} className="text-slate-400 hover:text-slate-600">Close</button>
+          </div>
+          <form onSubmit={handleCreateBranch} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch ID</label>
+              <input 
+                required
+                placeholder="e.g. BR-JHB"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newBranch.id}
+                onChange={e => setNewBranch({...newBranch, id: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Name</label>
+              <input 
+                required
+                placeholder="e.g. Johannesburg Main"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newBranch.name}
+                onChange={e => setNewBranch({...newBranch, name: e.target.value})}
+              />
+            </div>
+            <div className="md:col-span-2 pt-4 border-t border-slate-100">
+              <button 
+                type="submit"
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all"
+              >
+                CONFIRM & PERSIST BRANCH
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {isAdding && (
         <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="flex justify-between items-center mb-6">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900">New Location Entry</h4>
             <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600">Close</button>
           </div>
-          <form onSubmit={handleCreateLocation} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <form onSubmit={handleCreateLocation} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Location ID</label>
               <input 
@@ -182,7 +263,28 @@ const LocationManagement: React.FC = () => {
                 {Object.values(LocationCategory).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div className="lg:col-span-4 pt-4 border-t border-slate-100">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Partner Type</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newLoc.partner_type}
+                onChange={e => setNewLoc({...newLoc, partner_type: e.target.value as PartnerType})}
+              >
+                {Object.values(PartnerType).map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Allocation</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newLoc.branch_id}
+                onChange={e => setNewLoc({...newLoc, branch_id: e.target.value})}
+              >
+                <option value="">Unallocated</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div className="lg:col-span-3 pt-4 border-t border-slate-100">
               <button 
                 type="submit"
                 className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all"
@@ -226,6 +328,7 @@ const LocationManagement: React.FC = () => {
             <thead>
               <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
                 <th className="px-8 py-5">Location Identity</th>
+                <th className="px-8 py-5">Branch / Partner</th>
                 <th className="px-8 py-5">Functional Type</th>
                 <th className="px-8 py-5">Network Category</th>
                 <th className="px-8 py-5 text-right">Actions</th>
@@ -245,6 +348,12 @@ const LocationManagement: React.FC = () => {
                          <p className="text-sm font-black text-slate-900">{loc.name}</p>
                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">ID: {loc.id}</p>
                       </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-slate-700">{branches.find(b => b.id === loc.branch_id)?.name || 'Unallocated'}</p>
+                      <p className="text-[10px] text-slate-400 font-medium uppercase">{loc.partner_type}</p>
                     </div>
                   </td>
                   <td className="px-8 py-5">

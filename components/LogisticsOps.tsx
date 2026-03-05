@@ -25,6 +25,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const [driverId, setDriverId] = useState('');
   const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([]);
   const [condition, setCondition] = useState(MovementCondition.CLEAN);
+  const [movementDate, setMovementDate] = useState(new Date().toISOString().split('T')[0]);
   const [thaanFile, setThaanFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -123,7 +124,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
         for (const item of assets) {
           const { data: batch, error: fetchError } = await supabase
             .from('batches')
-            .select('quantity, current_location_id')
+            .select('*')
             .eq('id', item.batchId)
             .single();
 
@@ -132,30 +133,61 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
             throw new Error(`Insufficient quantity in Batch ${item.batchId}. Available: ${batch.quantity}`);
           }
 
+          let targetBatchId = item.batchId;
+
+          // Handle Partial Movement
+          if (item.quantity < batch.quantity) {
+            // 1. Reduce original batch quantity
+            const { error: reduceError } = await supabase
+              .from('batches')
+              .update({ quantity: batch.quantity - item.quantity })
+              .eq('id', item.batchId);
+            
+            if (reduceError) throw reduceError;
+
+            // 2. Create a new batch for the moved portion
+            const newBatchId = `B-${Math.floor(100000 + Math.random() * 900000)}`;
+            const { error: createError } = await supabase
+              .from('batches')
+              .insert([{
+                id: newBatchId,
+                asset_id: batch.asset_id,
+                quantity: item.quantity,
+                current_location_id: destination,
+                status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success',
+                created_at: batch.created_at // Keep original creation date or use movement date? User wants transaction date.
+              }]);
+            
+            if (createError) throw createError;
+            targetBatchId = newBatchId;
+          } else {
+            // Full Movement
+            const { error: updateError } = await supabase
+              .from('batches')
+              .update({ 
+                current_location_id: destination,
+                status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success'
+              })
+              .eq('id', item.batchId);
+
+            if (updateError) throw updateError;
+          }
+
+          // Record the movement
           const { error: moveError } = await supabase
             .from('batch_movements')
             .insert([{
-              batch_id: item.batchId,
+              batch_id: targetBatchId,
               from_location_id: origin,
               to_location_id: destination,
               truck_id: truckId,
               driver_id: driverId,
-              timestamp: new Date().toISOString(),
+              timestamp: new Date(movementDate).toISOString(),
               condition: condition,
               origin_user_id: currentUser.id
             }]);
 
           if (moveError) throw moveError;
-
-          const { error: updateError } = await supabase
-            .from('batches')
-            .update({ 
-              current_location_id: destination,
-              status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success'
-            })
-            .eq('id', item.batchId);
-
-          if (updateError) throw updateError;
         }
 
         if (thaanFile && assets[0]?.batchId) {
@@ -320,7 +352,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
               {!isReadOnly && (
                 <>
-                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
                       <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Truck size={14} /> Select Truck</h4>
                       <select 
@@ -342,6 +374,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                         <option value="">Select Driver</option>
                         {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
                       </select>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><ClipboardList size={14} /> Movement Date</h4>
+                      <input 
+                        type="date"
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                        value={movementDate}
+                        onChange={e => setMovementDate(e.target.value)}
+                      />
                     </div>
                   </div>
 

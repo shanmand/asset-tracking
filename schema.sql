@@ -7,12 +7,20 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. TABLES
+CREATE TABLE public.branches (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE public.asset_master (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL, -- Crate, Pallet
     dimensions TEXT,
     material TEXT,
+    billing_model TEXT DEFAULT 'Daily Rental (Supermarket)', -- Daily Rental, Issue Fee, None
+    ownership_type TEXT DEFAULT 'External', -- Internal, External
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -21,6 +29,8 @@ CREATE TABLE public.locations (
     name TEXT NOT NULL,
     type TEXT NOT NULL, -- Warehouse, At Customer, etc.
     category TEXT NOT NULL, -- Home, External
+    branch_id TEXT REFERENCES public.branches(id),
+    partner_type TEXT DEFAULT 'Internal', -- Internal, Customer, Supplier
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -195,6 +205,7 @@ CREATE TRIGGER on_auth_user_created
 -- Enable RLS for all tables
 ALTER TABLE public.asset_master ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trucks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -246,6 +257,10 @@ CREATE POLICY "assets_manage" ON public.asset_master FOR ALL TO authenticated US
 -- Locations Policies
 CREATE POLICY "locations_select" ON public.locations FOR SELECT TO authenticated USING (true);
 CREATE POLICY "locations_manage" ON public.locations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Branches Policies
+CREATE POLICY "branches_select" ON public.branches FOR SELECT TO authenticated USING (true);
+CREATE POLICY "branches_manage" ON public.branches FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Trucks Policies
 CREATE POLICY "trucks_select" ON public.trucks FOR SELECT TO authenticated USING (true);

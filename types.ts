@@ -27,6 +27,23 @@ export enum LocationType {
   LOST = 'Lost/Written Off'
 }
 
+export enum PartnerType {
+  INTERNAL = 'Internal',
+  CUSTOMER = 'Customer',
+  SUPPLIER = 'Supplier'
+}
+
+export enum BillingModel {
+  DAILY_RENTAL = 'Daily Rental (Supermarket)',
+  ISSUE_FEE = 'Issue Fee (QSR)',
+  NONE = 'None'
+}
+
+export enum OwnershipType {
+  INTERNAL = 'Internal',
+  EXTERNAL = 'External'
+}
+
 export enum LocationCategory {
   HOME = 'Home',
   EXTERNAL = 'External'
@@ -71,6 +88,8 @@ export interface AssetMaster {
   type: AssetType;
   dimensions: string;
   material: string;
+  billing_model: BillingModel;
+  ownership_type: OwnershipType;
 }
 
 export interface FeeSchedule {
@@ -83,11 +102,19 @@ export interface FeeSchedule {
   is_active?: boolean; // NEW: For admin bulk management
 }
 
+export interface Branch {
+  id: string;
+  name: string;
+  created_at?: string;
+}
+
 export interface Location {
   id: string;
   name: string;
   type: LocationType;
   category: LocationCategory;
+  branch_id?: string;
+  partner_type: PartnerType;
 }
 
 export interface Truck {

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_ASSETS, MOCK_FEES } from '../constants';
 import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2 } from 'lucide-react';
-import { AssetMaster, FeeSchedule } from '../types';
+import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface AssetListProps {
@@ -52,14 +52,15 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   const [newAsset, setNewAsset] = useState<Partial<AssetMaster>>({
     id: '',
     name: '',
-    type: 'Crate' as any,
+    type: AssetType.CRATE,
     dimensions: '',
-    material: ''
+    material: '',
+    billing_model: BillingModel.DAILY_RENTAL,
+    ownership_type: OwnershipType.EXTERNAL
   });
 
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Removed isAdmin restriction as per user request
     
     setIsLoading(true);
     try {
@@ -72,7 +73,15 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
       
       setAssets(prev => [...prev, newAsset as AssetMaster]);
       setIsAdding(false);
-      setNewAsset({ id: '', name: '', type: 'Crate' as any, dimensions: '', material: '' });
+      setNewAsset({ 
+        id: '', 
+        name: '', 
+        type: AssetType.CRATE, 
+        dimensions: '', 
+        material: '',
+        billing_model: BillingModel.DAILY_RENTAL,
+        ownership_type: OwnershipType.EXTERNAL
+      });
     } catch (err) {
       console.error("Add Asset Error:", err);
       alert("Failed to add asset. Check RLS policies.");
@@ -244,6 +253,28 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                   value={newAsset.dimensions}
                   onChange={e => setNewAsset({...newAsset, dimensions: e.target.value})}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Billing Model</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={newAsset.billing_model}
+                    onChange={e => setNewAsset({...newAsset, billing_model: e.target.value as any})}
+                  >
+                    {Object.values(BillingModel).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Ownership</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={newAsset.ownership_type}
+                    onChange={e => setNewAsset({...newAsset, ownership_type: e.target.value as any})}
+                  >
+                    {Object.values(OwnershipType).map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="flex gap-3 pt-4">
                 <button 

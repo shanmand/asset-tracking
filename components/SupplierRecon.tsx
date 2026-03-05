@@ -28,6 +28,9 @@ const SupplierRecon: React.FC = () => {
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [filter, setFilter] = useState<'all' | 'notified' | 'unbilled'>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -101,9 +104,16 @@ const SupplierRecon: React.FC = () => {
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const filteredLosses = losses.filter(l => {
-    if (filter === 'notified') return l.supplier_notified;
-    if (filter === 'unbilled') return l.supplier_notified && !l.supplier_invoice_ref;
-    return true;
+    const matchesFilter = filter === 'all' || 
+                         (filter === 'notified' && l.supplier_notified) ||
+                         (filter === 'unbilled' && l.supplier_notified && !l.supplier_invoice_ref);
+    
+    const matchesDate = (!startDate || new Date(l.timestamp) >= new Date(startDate)) &&
+                       (!endDate || new Date(l.timestamp) <= new Date(endDate));
+    
+    const matchesLocation = selectedLocation === 'all' || l.last_known_location_id === selectedLocation;
+
+    return matchesFilter && matchesDate && matchesLocation;
   });
 
   const totalUnbilledLossValue = losses
@@ -155,9 +165,37 @@ const SupplierRecon: React.FC = () => {
             <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Supplier Reconciliation</h3>
           </div>
           
-          <div className="flex gap-2">
-            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
-            <FilterButton active={filter === 'unbilled'} onClick={() => setFilter('unbilled')} label="Unbilled" />
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase">From</span>
+              <input 
+                type="date" 
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase">To</span>
+              <input 
+                type="date" 
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+              />
+            </div>
+            <select 
+              className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+              value={selectedLocation}
+              onChange={e => setSelectedLocation(e.target.value)}
+            >
+              <option value="all">All Partners</option>
+              {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.partner_type})</option>)}
+            </select>
+            <div className="flex gap-2">
+              <FilterButton active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
+              <FilterButton active={filter === 'unbilled'} onClick={() => setFilter('unbilled')} label="Unbilled" />
+            </div>
           </div>
         </div>
 

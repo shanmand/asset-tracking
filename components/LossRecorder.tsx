@@ -27,6 +27,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   const [isRechargeable, setIsRechargeable] = useState(false);
   const [lostQty, setLostQty] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
+  const [lossDate, setLossDate] = useState(new Date().toISOString().split('T')[0]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -130,22 +131,59 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     setIsProcessing(true);
     try {
       if (isSupabaseConfigured) {
-        const { error } = await supabase.from('asset_losses').insert([{
-          batch_id: selectedBatchId,
+        const batch = batches.find(b => b.id === selectedBatchId);
+        if (!batch) throw new Error("Batch not found");
+
+        let targetBatchId = selectedBatchId;
+
+        // Handle Partial Loss
+        if (lostQty < batch.quantity) {
+          // 1. Reduce original batch quantity
+          const { error: reduceError } = await supabase
+            .from('batches')
+            .update({ quantity: batch.quantity - lostQty })
+            .eq('id', selectedBatchId);
+          
+          if (reduceError) throw reduceError;
+
+          // 2. Create a new "Lost" batch for the portion
+          const newBatchId = `B-LOST-${Math.floor(100000 + Math.random() * 900000)}`;
+          const { error: createError } = await supabase
+            .from('batches')
+            .insert([{
+              id: newBatchId,
+              asset_id: batch.asset_id,
+              quantity: lostQty,
+              current_location_id: batch.current_location_id,
+              status: 'Lost',
+              created_at: batch.created_at
+            }]);
+          
+          if (createError) throw createError;
+          targetBatchId = newBatchId;
+        } else {
+          // Full Loss
+          const { error: updateError } = await supabase
+            .from('batches')
+            .update({ status: 'Lost' })
+            .eq('id', selectedBatchId);
+          
+          if (updateError) throw updateError;
+        }
+
+        // Record the loss
+        const { error: lossError } = await supabase.from('asset_losses').insert([{
+          batch_id: targetBatchId,
           lost_quantity: lostQty,
           loss_type: lossType,
           is_rechargeable: isRechargeable,
           notes: notes,
           reported_by: currentUser.id,
-          last_known_location_id: batches.find(b => b.id === selectedBatchId)?.current_location_id
+          last_known_location_id: batch.current_location_id,
+          timestamp: new Date(lossDate).toISOString()
         }]);
-        if (error) throw error;
 
-        // Update batch status to Lost if fully lost
-        const batch = batches.find(b => b.id === selectedBatchId);
-        if (batch && lostQty >= batch.quantity) {
-          await supabase.from('batches').update({ status: 'Lost' }).eq('id', selectedBatchId);
-        }
+        if (lossError) throw lossError;
       }
 
       setSuccessMsg(`Loss forensic audit complete for Batch #${selectedBatchId}.`);
@@ -259,6 +297,16 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
                         className="w-full border border-slate-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-rose-500"
                         value={lostQty}
                         onChange={e => setLostQty(parseInt(e.target.value) || 0)}
+                      />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Incident Date</span>
+                      <input 
+                        disabled={isReadOnly}
+                        type="date" 
+                        className="w-full border border-slate-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-rose-500"
+                        value={lossDate}
+                        onChange={e => setLossDate(e.target.value)}
                       />
                     </label>
                   </div>

@@ -18,7 +18,8 @@ const BatchManagement: React.FC = () => {
     asset_id: '',
     quantity: 0,
     current_location_id: '',
-    status: 'Success'
+    status: 'Success',
+    created_at: new Date().toISOString().split('T')[0]
   });
 
   const fetchData = async () => {
@@ -73,6 +74,11 @@ const BatchManagement: React.FC = () => {
         const payload = { ...newBatch };
         if (!payload.id) payload.id = `B-${Math.floor(1000 + Math.random() * 9000)}`;
         
+        // Ensure created_at is a full ISO string if it's just a date
+        if (payload.created_at.length === 10) {
+          payload.created_at = new Date(payload.created_at).toISOString();
+        }
+
         const { error } = await supabase.from('batches').insert([payload]);
         if (error) throw error;
       }
@@ -83,7 +89,8 @@ const BatchManagement: React.FC = () => {
         asset_id: assets[0]?.id || '',
         quantity: 0,
         current_location_id: locations[0]?.id || '',
-        status: 'Success'
+        status: 'Success',
+        created_at: new Date().toISOString().split('T')[0]
       });
       fetchData();
     } catch (err: any) {
@@ -185,6 +192,16 @@ const BatchManagement: React.FC = () => {
               {locations.length === 0 && (
                 <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No locations found. Add a location in the Admin Panel first.</p>
               )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Intake Date</label>
+              <input 
+                required
+                type="date"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newBatch.created_at}
+                onChange={e => setNewBatch({...newBatch, created_at: e.target.value})}
+              />
             </div>
             <div className="lg:col-span-4 pt-4 border-t border-slate-100">
               <button 
