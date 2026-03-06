@@ -224,7 +224,17 @@ BEGIN
     END IF;
 END $$;
 
--- 6. Accrual Engine RPC
+-- 6. Create THAAN Slips Table
+CREATE TABLE IF NOT EXISTS public.thaan_slips (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id TEXT REFERENCES public.batches(id),
+    doc_url TEXT NOT NULL,
+    is_signed BOOLEAN DEFAULT FALSE,
+    signed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 7. Accrual Engine RPC
 CREATE OR REPLACE FUNCTION calculate_batch_accrual(batch_id_input TEXT)
 RETURNS NUMERIC AS $$
 DECLARE
@@ -252,7 +262,25 @@ BEGIN
 
     RETURN COALESCE(v_batch_qty * v_daily_rate * v_days, 0);
 END;
-$$ LANGUAGE plpgsql;`}
+$$ LANGUAGE plpgsql;
+
+-- 7. Create Storage Bucket for THAAN Slips
+-- Note: This must be run in the SQL Editor. 
+-- It ensures the 'thaan-slips' bucket exists and is public.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('thaan-slips', 'thaan-slips', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 8. Storage Policies
+-- Allow public read access to thaan-slips
+CREATE POLICY "Public Read Access"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'thaan-slips');
+
+-- Allow authenticated uploads to thaan-slips
+CREATE POLICY "Authenticated Upload Access"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'thaan-slips');`}
             </pre>
             <div className="p-4 bg-amber-900/20 border border-amber-900/50 rounded-xl flex gap-4">
               <AlertTriangle className="text-amber-500 shrink-0" size={24} />

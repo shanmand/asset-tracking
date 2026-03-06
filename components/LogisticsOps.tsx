@@ -202,7 +202,12 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
             .from('thaan-slips')
             .upload(filePath, thaanFile);
 
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            if (uploadError.message.includes('bucket not found')) {
+              throw new Error("Storage bucket 'thaan-slips' not found. Please create it in your Supabase dashboard or run the SQL in the 'Schema & Migrations' tab.");
+            }
+            throw uploadError;
+          }
 
           const { data: publicUrlData } = supabase.storage
             .from('thaan-slips')
