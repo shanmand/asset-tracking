@@ -20,7 +20,8 @@ import {
   Zap,
   Play,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Info
 } from 'lucide-react';
 import { LocationType, LocationCategory, Batch, Location, FeeSchedule, ThaanSlip, AssetMaster, AssetLoss } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -208,6 +209,19 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
               <option value="Cape Town Cold Storage">CT Depot (Epping)</option>
             </select>
           </div>
+        </div>
+      </div>
+
+      {/* Source Data Explanation */}
+      <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl flex gap-4">
+        <Info className="text-emerald-600 shrink-0" size={20} />
+        <div>
+          <h4 className="text-xs font-black text-emerald-900 uppercase tracking-widest">Accrual Engine Logic</h4>
+          <p className="text-[11px] text-emerald-800 mt-1 leading-relaxed">
+            The Accrual Engine calculates liability by joining <strong>Active Batches</strong> with the <strong>Fee Schedule</strong>. 
+            Rental accrues daily from the <code>created_at</code> timestamp until a <strong>Loss</strong> is recorded or a <strong>THAAN Slip</strong> is signed at a customer location.
+            The engine uses the <code>calculate_batch_accrual</code> Postgres function for high-precision ZAR calculations.
+          </p>
         </div>
       </div>
 

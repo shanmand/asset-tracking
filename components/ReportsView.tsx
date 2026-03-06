@@ -102,6 +102,39 @@ const ReportsView: React.FC = () => {
     return { totalUnits, byLocation, byAsset };
   }, [filteredData, locations, assets]);
 
+  const handleExportCSV = () => {
+    const headers = ['Batch ID', 'Asset', 'Asset Type', 'Location', 'Partner Type', 'Quantity'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredData.map(batch => {
+        const loc = locations.find(l => l.id === batch.current_location_id);
+        const asset = assets.find(a => a.id === batch.asset_id);
+        return [
+          batch.id,
+          asset?.name || 'Unknown',
+          asset?.type || 'Unknown',
+          loc?.name || 'Unknown',
+          loc?.partner_type || 'Unknown',
+          batch.quantity
+        ].join(',');
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `logistics_intelligence_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleGeneratePDF = () => {
+    window.print();
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -119,10 +152,16 @@ const ReportsView: React.FC = () => {
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Real-time Inventory & Asset Distribution</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <button className="flex-1 md:flex-none px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-200 transition-all">
+          <button 
+            onClick={handleExportCSV}
+            className="flex-1 md:flex-none px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-200 transition-all"
+          >
             <Download size={16} /> EXPORT CSV
           </button>
-          <button className="flex-1 md:flex-none px-6 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+          <button 
+            onClick={handleGeneratePDF}
+            className="flex-1 md:flex-none px-6 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+          >
             <TrendingUp size={16} /> GENERATE PDF
           </button>
         </div>

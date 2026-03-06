@@ -222,7 +222,37 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'branches' AND policyname = 'Allow admin insert') THEN
         CREATE POLICY "Allow admin insert" ON public.branches FOR INSERT WITH CHECK (true);
     END IF;
-END $$;`}
+END $$;
+
+-- 6. Accrual Engine RPC
+CREATE OR REPLACE FUNCTION calculate_batch_accrual(batch_id_input TEXT)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_batch_qty INT;
+    v_asset_id TEXT;
+    v_created_at TIMESTAMP;
+    v_daily_rate NUMERIC;
+    v_days INT;
+BEGIN
+    -- Get batch details
+    SELECT quantity, asset_id, created_at 
+    INTO v_batch_qty, v_asset_id, v_created_at
+    FROM batches WHERE id = batch_id_input;
+
+    -- Get current daily rental rate
+    SELECT amount_zar INTO v_daily_rate
+    FROM fee_schedule 
+    WHERE asset_id = v_asset_id 
+    AND fee_type = 'Daily Rental (Supermarket)'
+    AND effective_to IS NULL
+    LIMIT 1;
+
+    -- Calculate days (minimum 1)
+    v_days := GREATEST(1, EXTRACT(DAY FROM (NOW() - v_created_at))::INT);
+
+    RETURN COALESCE(v_batch_qty * v_daily_rate * v_days, 0);
+END;
+$$ LANGUAGE plpgsql;`}
             </pre>
             <div className="p-4 bg-amber-900/20 border border-amber-900/50 rounded-xl flex gap-4">
               <AlertTriangle className="text-amber-500 shrink-0" size={24} />

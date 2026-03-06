@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User, History, UserCheck, Skull, MapPin, Loader2 } from 'lucide-react';
+import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User, History, UserCheck, Skull, MapPin, Loader2, Info } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
 import { LocationType, UserRole, User as UserType, Batch, AssetLoss, Location, User as DBUser, AssetMaster, Claim } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -27,12 +27,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!isSupabaseConfigured) {
-        setDbBatches([]);
-        setDbLosses([]);
-        setDbLocations([]);
-        setDbUsers([]);
-        setDbAssets([]);
-        setDbClaims([]);
+        setDbBatches(MOCK_BATCHES);
+        setDbLosses(MOCK_LOSSES);
+        setDbLocations(MOCK_LOCATIONS);
+        setDbUsers(MOCK_USERS);
+        setDbAssets(MOCK_ASSETS);
+        setDbClaims(MOCK_CLAIMS);
         setDbBranches([]);
         setIsLoading(false);
         return;
@@ -287,6 +287,19 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           trendUp={true} 
           icon={<TrendingUp className="text-emerald-500" />} 
         />
+      </div>
+
+      {/* Source Data Explanation */}
+      <div className="bg-slate-50 border border-slate-200 p-6 rounded-xl flex gap-4">
+        <Info className="text-blue-500 shrink-0" size={20} />
+        <div>
+          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Claims Source Data</h4>
+          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+            Claims are automatically generated when a <strong>Quantity Variance</strong> is reported during the <strong>Inventory Intake</strong> process. 
+            They can also be manually triggered from the <strong>Logistics Intelligence</strong> module when reconciling signed THAAN slips against dispatched quantities.
+            Each claim tracks the liability of the transporter (Truck/Driver) for damaged or missing assets.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

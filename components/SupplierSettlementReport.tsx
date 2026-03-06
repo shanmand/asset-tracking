@@ -119,8 +119,14 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
         
         const matchesBranch = selectedBranch === 'all' || loc?.branch_id === selectedBranch;
-        const matchesDate = (!startDate || new Date(b.created_at) >= new Date(startDate)) &&
-                           (!endDate || new Date(b.created_at) <= new Date(endDate));
+        
+        // Fix: Use startDate and endDate for filtering batches by created_at
+        const batchDate = new Date(b.created_at);
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        
+        const matchesDate = (!start || batchDate >= start) &&
+                           (!end || batchDate <= end);
 
         // Logic: External Assets at External Locations are removed from our account
         const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
@@ -219,15 +225,36 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
   }, [batches, fees, losses, claims, assets, locations, movements, thaans]);
 
   const handleExport = () => {
-    alert("Exporting reconciliation data to CSV...");
-    // In a real app, this would generate a CSV from reportData
+    const headers = ['Type', 'ID', 'Asset', 'Quantity', 'Days/Reason', 'Rate/Fee', 'Total (ZAR)', 'Branch'];
+    const rows: any[] = [];
+
+    reportData.rentals.forEach(r => rows.push(['Rental', r.id, r.asset, r.qty, `${r.days}d`, r.rate, r.total, r.branch]));
+    reportData.losses.forEach(l => rows.push(['Loss', l.id, l.asset, l.qty, l.reason, l.fee, l.total, l.branch]));
+    reportData.penalties.forEach(p => rows.push(['Penalty', p.id, '-', '-', p.reason, '-', p.total, p.branch]));
+    reportData.offsets.forEach(o => rows.push(['Offset', o.id, '-', '-', o.reason, '-', -o.total, o.branch]));
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `settlement_audit_${startDate || 'start'}_to_${endDate || 'end'}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleApprove = async () => {
     if (!isAdmin) return;
-    if (!window.confirm("Are you sure you want to approve this monthly statement? This will lock the records for this period.")) return;
+    if (!window.confirm(`Are you sure you want to approve the statement for ${currentMonth}? This will lock the records for this period.`)) return;
     
-    alert("Statement approved and locked for May 2025.");
+    // In a real app, this would update a 'statements' table in Supabase
+    alert(`Statement approved and locked for ${currentMonth}.`);
   };
 
   if (isLoading) {

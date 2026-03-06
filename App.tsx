@@ -46,7 +46,7 @@ import AdminPanel from './components/AdminPanel';
 import LogisticsRegistry from './components/LogisticsRegistry';
 import BatchManagement from './components/BatchManagement';
 import ReportsView from './components/ReportsView';
-import { UserRole } from './types';
+import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
 
 enum NavItem {
@@ -73,6 +73,15 @@ const AppContent: React.FC = () => {
   const { user, profile, isLoading, logout, hasPermission } = useUser();
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
+  const [dbBranches, setDbBranches] = useState<Branch[]>([]);
+
+  React.useEffect(() => {
+    const fetchBranches = async () => {
+      const { data } = await supabase.from('branches').select('*');
+      if (data) setDbBranches(data);
+    };
+    fetchBranches();
+  }, []);
 
   const currentBranchContext = profile?.role_name === UserRole.MANAGER 
     ? (profile.home_branch_name.includes('JHB') ? 'Kya Sands' : 'Durban') 
@@ -171,7 +180,7 @@ const AppContent: React.FC = () => {
               <div className="flex items-center gap-2 px-3 py-1 text-[10px] font-black uppercase text-slate-400 border-r border-slate-200">
                 <Building2 size={14} /> Branch Context
               </div>
-              {['Kya Sands', 'Durban', 'Consolidated'].map(branch => (
+              {['Consolidated', ...dbBranches.map(b => b.name)].map(branch => (
                 <button
                   key={branch}
                   onClick={() => setSelectedBranchFilter(branch)}

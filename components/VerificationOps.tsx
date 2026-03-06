@@ -113,6 +113,25 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
             new_value: receivedQty.toString(),
             timestamp: new Date().toISOString()
           }]);
+
+          // NEW: Create a Claim automatically for the variance
+          // We need to find the thaan slip if it exists
+          const { data: thaanData } = await supabase
+            .from('thaan_slips')
+            .select('id')
+            .eq('batch_id', selectedBatch.id)
+            .single();
+
+          await supabase.from('claims').insert([{
+            batch_id: selectedBatch.id,
+            truck_id: truck?.id || 'TRK-UNKNOWN',
+            driver_id: driver?.id || 'DRV-UNKNOWN',
+            thaan_slip_id: thaanData?.id || 'THN-UNKNOWN',
+            type: variance < 0 ? 'Damaged' : 'Dirty', // Using Damaged as proxy for missing/shortage
+            amount_claimed_zar: Math.abs(variance) * 250, // Mock penalty per unit
+            status: 'Lodged',
+            created_at: new Date().toISOString()
+          }]);
         }
       }
 

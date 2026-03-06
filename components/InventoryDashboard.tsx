@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MOCK_LOCATIONS, MOCK_BATCHES, MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, TrendingUp, Info, Loader2 } from 'lucide-react';
-import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule } from '../types';
+import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, TrendingUp, Info, Loader2, Filter, Search, Calendar } from 'lucide-react';
+import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule, Branch } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 const InventoryDashboard: React.FC = () => {
@@ -10,7 +10,15 @@ const InventoryDashboard: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filters
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedAsset, setSelectedAsset] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -19,23 +27,26 @@ const InventoryDashboard: React.FC = () => {
         setBatches([]);
         setAssets([]);
         setFees([]);
+        setBranches([]);
         setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       try {
-        const [locsRes, batchesRes, assetsRes, feesRes] = await Promise.all([
+        const [locsRes, batchesRes, assetsRes, feesRes, branchesRes] = await Promise.all([
           supabase.from('locations').select('*'),
           supabase.from('batches').select('*'),
           supabase.from('asset_master').select('*'),
-          supabase.from('fee_schedule').select('*')
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('branches').select('*')
         ]);
 
         if (locsRes.data) setLocations(locsRes.data);
         if (batchesRes.data) setBatches(batchesRes.data);
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);
+        if (branchesRes.data) setBranches(branchesRes.data);
       } catch (err) {
         console.error("Inventory Fetch Error:", err);
       } finally {
@@ -45,6 +56,24 @@ const InventoryDashboard: React.FC = () => {
 
     fetchData();
   }, []);
+
+  const filteredLocations = useMemo(() => {
+    return locations.filter(loc => {
+      const matchesBranch = selectedBranch === 'all' || loc.branch_id === selectedBranch;
+      const matchesSearch = loc.name.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const inventory = batches.filter(b => b.current_location_id === loc.id);
+      const matchesAsset = selectedAsset === 'all' || inventory.some(b => b.asset_id === selectedAsset);
+      
+      const matchesDate = inventory.some(b => {
+        const created = new Date(b.created_at);
+        return (!startDate || created >= new Date(startDate)) &&
+               (!endDate || created <= new Date(endDate));
+      }) || (inventory.length === 0 && !startDate && !endDate);
+
+      return matchesBranch && matchesSearch && matchesAsset && matchesDate;
+    });
+  }, [locations, batches, selectedBranch, selectedAsset, searchQuery, startDate, endDate]);
 
   // Logic: Calculate accrued costs for batches at locations
   const calculateAccruedCost = (batchId: string) => {
@@ -84,7 +113,7 @@ const InventoryDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-7xl mx-auto pb-20">
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-200">
@@ -98,7 +127,7 @@ const InventoryDashboard: React.FC = () => {
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Home Locations</p>
             <p className="text-2xl font-bold text-slate-800">
-              {locations.filter(l => l.category === LocationCategory.HOME).length} Units
+              {locations.filter(l => l.category === LocationCategory.HOME).length} Sites
             </p>
           </div>
           <Home className="text-emerald-500 opacity-20" size={40} />
@@ -111,6 +140,56 @@ const InventoryDashboard: React.FC = () => {
             </p>
           </div>
           <ThermometerSnowflake className="text-blue-500 opacity-20" size={40} />
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Search locations..." 
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <select 
+              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={selectedBranch}
+              onChange={e => setSelectedBranch(e.target.value)}
+            >
+              <option value="all">All Branches</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <select 
+              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={selectedAsset}
+              onChange={e => setSelectedAsset(e.target.value)}
+            >
+              <option value="all">All Assets</option>
+              {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+              <Calendar size={16} className="text-slate-400" />
+              <input 
+                type="date" 
+                className="bg-transparent text-xs font-bold outline-none"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+              />
+              <span className="text-slate-300">-</span>
+              <input 
+                type="date" 
+                className="bg-transparent text-xs font-bold outline-none"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -128,7 +207,7 @@ const InventoryDashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-x divide-y divide-slate-100">
-          {locations.map(loc => {
+          {filteredLocations.map(loc => {
             const inventory = getInventoryAtLocation(loc.id);
             const locationCost = inventory.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
             const totalUnits = inventory.reduce((acc, b) => acc + b.quantity, 0);

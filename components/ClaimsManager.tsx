@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_CLAIMS, MOCK_BATCHES, MOCK_CLAIM_AUDITS } from '../constants';
-import { AlertCircle, Clock, CheckCircle2, History, User, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle2, History, User, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon, Info } from 'lucide-react';
 import { ClaimStatus, Claim, Batch, ClaimAudit, Truck, Driver } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -117,6 +117,19 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
           <div className="p-3 bg-slate-100 text-slate-600 rounded-full">
             <FileText size={24} />
           </div>
+        </div>
+      </div>
+
+      {/* Source Data Explanation */}
+      <div className="bg-slate-50 border border-slate-200 p-6 rounded-xl flex gap-4">
+        <Info className="text-blue-500 shrink-0" size={20} />
+        <div>
+          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Claims Source Data</h4>
+          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+            Claims are automatically generated when a <strong>Quantity Variance</strong> is reported during the <strong>Inventory Intake</strong> process. 
+            They can also be manually triggered from the <strong>Logistics Intelligence</strong> module when reconciling signed THAAN slips against dispatched quantities.
+            Each claim tracks the liability of the transporter (Truck/Driver) for damaged or missing assets.
+          </p>
         </div>
       </div>
 
