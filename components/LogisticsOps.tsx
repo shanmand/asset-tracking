@@ -118,6 +118,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     }
 
     setIsSubmitting(true);
+    let firstTargetBatchId: string | null = null;
 
     try {
       if (isSupabaseConfigured) {
@@ -155,7 +156,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                 quantity: item.quantity,
                 current_location_id: destination,
                 status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success',
-                created_at: batch.created_at // Keep original creation date or use movement date? User wants transaction date.
+                created_at: batch.created_at
               }]);
             
             if (createError) throw createError;
@@ -172,6 +173,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
             if (updateError) throw updateError;
           }
+
+          if (!firstTargetBatchId) firstTargetBatchId = targetBatchId;
 
           // Record the movement
           const { error: moveError } = await supabase
@@ -190,9 +193,9 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           if (moveError) throw moveError;
         }
 
-        if (thaanFile && assets[0]?.batchId) {
+        if (thaanFile && firstTargetBatchId) {
           const fileExt = thaanFile.name.split('.').pop();
-          const fileName = `${assets[0].batchId}-${Math.random()}.${fileExt}`;
+          const fileName = `${firstTargetBatchId}-${Math.random()}.${fileExt}`;
           const filePath = `thaan-slips/${fileName}`;
 
           const { error: uploadError } = await supabase.storage
@@ -208,7 +211,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           await supabase
             .from('thaan_slips')
             .insert([{
-              batch_id: assets[0].batchId,
+              batch_id: firstTargetBatchId,
               doc_url: publicUrlData.publicUrl,
               is_signed: true,
               signed_at: new Date().toISOString()
@@ -393,6 +396,56 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                       />
                     </div>
                   </div>
+
+                  {/* THAAN Slip Upload Section */}
+                  {locations.find(l => l.id === destination)?.type === LocationType.AT_CUSTOMER && (
+                    <div className="p-6 bg-amber-50 rounded-2xl border border-amber-200 space-y-4 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                            <FileText size={20} />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-amber-900">THAAN Slip Required</h4>
+                            <p className="text-[10px] text-amber-700 font-medium uppercase tracking-wider">Customer delivery manifest validation</p>
+                          </div>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-colors shadow-lg shadow-amber-200"
+                        >
+                          {thaanFile ? 'Change File' : 'Upload Slip'}
+                        </button>
+                      </div>
+                      
+                      <input 
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept="image/*,.pdf"
+                        onChange={e => setThaanFile(e.target.files?.[0] || null)}
+                      />
+
+                      {thaanFile && (
+                        <div className="flex items-center justify-between p-3 bg-white/50 rounded-xl border border-amber-100">
+                          <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-md">
+                              <CheckCircle2 size={14} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-700 truncate max-w-[200px]">{thaanFile.name}</span>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => setThaanFile(null)}
+                            className="p-1 text-slate-400 hover:text-rose-500"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {errors.length > 0 && (
                     <div className="p-4 bg-rose-50 rounded-xl border border-rose-100 space-y-1">
