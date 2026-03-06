@@ -402,55 +402,58 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     </div>
                   </div>
 
-                  {/* THAAN Slip Upload Section */}
-                  {locations.find(l => l.id === destination)?.type === LocationType.AT_CUSTOMER && (
-                    <div className="p-6 bg-amber-50 rounded-2xl border border-amber-200 space-y-4 animate-in fade-in slide-in-from-top-2">
-                      <div className="flex items-center justify-between">
+                  {/* THAAN Slip Upload Section - Always visible for better UX */}
+                  <div className={`p-6 rounded-2xl border transition-all space-y-4 ${locations.find(l => l.id === destination)?.type === LocationType.AT_CUSTOMER ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200 opacity-80'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${locations.find(l => l.id === destination)?.type === LocationType.AT_CUSTOMER ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'}`}>
+                          <FileText size={20} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-slate-900">THAAN Slip / Proof of Delivery</h4>
+                            {locations.find(l => l.id === destination)?.type === LocationType.AT_CUSTOMER && (
+                              <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[8px] font-black rounded uppercase tracking-widest animate-pulse">Required</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Upload signed manifest or delivery note</p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-lg ${locations.find(l => l.id === destination)?.type === LocationType.AT_CUSTOMER ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-200' : 'bg-slate-800 text-white hover:bg-slate-700 shadow-slate-200'}`}
+                      >
+                        {thaanFile ? 'Change File' : 'Upload Slip'}
+                      </button>
+                    </div>
+                    
+                    <input 
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*,.pdf"
+                      onChange={e => setThaanFile(e.target.files?.[0] || null)}
+                    />
+
+                    {thaanFile && (
+                      <div className="flex items-center justify-between p-3 bg-white/80 rounded-xl border border-slate-200 shadow-inner">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
-                            <FileText size={20} />
+                          <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-md">
+                            <CheckCircle2 size={14} />
                           </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-amber-900">THAAN Slip Required</h4>
-                            <p className="text-[10px] text-amber-700 font-medium uppercase tracking-wider">Customer delivery manifest validation</p>
-                          </div>
+                          <span className="text-xs font-bold text-slate-700 truncate max-w-[200px]">{thaanFile.name}</span>
                         </div>
                         <button 
                           type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-colors shadow-lg shadow-amber-200"
+                          onClick={() => setThaanFile(null)}
+                          className="p-1 text-slate-400 hover:text-rose-500"
                         >
-                          {thaanFile ? 'Change File' : 'Upload Slip'}
+                          <Trash2 size={16} />
                         </button>
                       </div>
-                      
-                      <input 
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        accept="image/*,.pdf"
-                        onChange={e => setThaanFile(e.target.files?.[0] || null)}
-                      />
-
-                      {thaanFile && (
-                        <div className="flex items-center justify-between p-3 bg-white/50 rounded-xl border border-amber-100">
-                          <div className="flex items-center gap-3">
-                            <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-md">
-                              <CheckCircle2 size={14} />
-                            </div>
-                            <span className="text-xs font-bold text-slate-700 truncate max-w-[200px]">{thaanFile.name}</span>
-                          </div>
-                          <button 
-                            type="button"
-                            onClick={() => setThaanFile(null)}
-                            className="p-1 text-slate-400 hover:text-rose-500"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {errors.length > 0 && (
                     <div className="p-4 bg-rose-50 rounded-xl border border-rose-100 space-y-1">

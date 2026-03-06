@@ -22,6 +22,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<DBUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [lossType, setLossType] = useState<LossType>(LossType.MISSING);
   const [isRechargeable, setIsRechargeable] = useState(false);
@@ -33,6 +34,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
 
   const [lastKnown, setLastKnown] = useState<{
     location: string;
+    locationId: string;
     locationType: LocationType;
     driver?: string;
     truck?: string;
@@ -86,26 +88,23 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (!selectedBatchId) {
-      setLastKnown(null);
-      return;
-    }
-
-    const batch = batches.find(b => b.id === selectedBatchId);
+  // Forensic Logic: Triggered when a batch is selected in the modal
+  const runForensics = (batchId: string) => {
+    const batch = batches.find(b => b.id === batchId);
     if (!batch) return;
 
-    const batchMovements = movements.filter(m => m.batch_id === selectedBatchId)
+    const batchMovements = movements.filter(m => m.batch_id === batchId)
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
     const lastMv = batchMovements[0];
     const loc = locations.find(l => l.id === (lastMv?.to_location_id || batch.current_location_id));
     const truck = lastMv?.truck_id ? trucks.find(t => t.id === lastMv.truck_id) : null;
     const driver = lastMv?.driver_id ? drivers.find(d => d.id === lastMv.driver_id) : null;
-    const thaan = thaans.find(t => t.batch_id === selectedBatchId);
+    const thaan = thaans.find(t => t.batch_id === batchId);
 
     setLastKnown({
       location: loc?.name || 'Unknown',
+      locationId: loc?.id || batch.current_location_id,
       locationType: loc?.type || LocationType.WAREHOUSE,
       driver: driver?.full_name,
       truck: truck?.plate_number,
@@ -121,6 +120,14 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     } else {
         setLossType(LossType.MISSING);
         setIsRechargeable(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedBatchId) {
+      runForensics(selectedBatchId);
+    } else {
+      setLastKnown(null);
     }
   }, [selectedBatchId, batches, movements, locations, trucks, drivers, thaans]);
 
@@ -179,7 +186,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
           is_rechargeable: isRechargeable,
           notes: notes,
           reported_by: currentUser.id,
-          last_known_location_id: batch.current_location_id,
+          last_known_location_id: lastKnown?.locationId || batch.current_location_id,
           timestamp: new Date(lossDate).toISOString()
         }]);
 
@@ -189,6 +196,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
       setSuccessMsg(`Loss forensic audit complete for Batch #${selectedBatchId}.`);
       setSelectedBatchId('');
       setNotes('');
+      setIsModalOpen(false);
     } catch (err) {
       console.error(err);
     } finally {
@@ -208,7 +216,22 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Loss Forensics & Write-offs</h2>
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Investigate & Record Asset Discrepancies</p>
+        </div>
+        {!isReadOnly && (
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="px-6 py-3 bg-rose-600 text-white rounded-xl font-black text-xs flex items-center gap-2 hover:bg-rose-700 transition-all shadow-xl shadow-rose-200 uppercase tracking-widest"
+          >
+            <Skull size={18} /> Report New Loss
+          </button>
+        )}
+      </div>
+
       {isReadOnly && (
         <div className="bg-amber-50 border border-amber-100 p-6 rounded-2xl flex items-center gap-4">
           <ShieldAlert className="text-amber-500" size={24} />
@@ -229,23 +252,77 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${isReadOnly ? 'opacity-70 grayscale-[0.5]' : ''}`}>
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Skull size={18} className="text-rose-400" />
-                <h3 className="font-bold text-sm uppercase tracking-widest">Write-off Terminal</h3>
+      {/* Loss History Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
+          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Recent Write-off Log</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
+                <th className="px-6 py-4">Batch ID</th>
+                <th className="px-6 py-4">Loss Type</th>
+                <th className="px-6 py-4">Qty</th>
+                <th className="px-6 py-4">Last Known Loc</th>
+                <th className="px-6 py-4">Date</th>
+                <th className="px-6 py-4">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {batches.filter(b => b.status === 'Lost').map(batch => {
+                const batchMovements = movements.filter(m => m.batch_id === batch.id)
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                const lastMv = batchMovements[0];
+                const loc = locations.find(l => l.id === (lastMv?.to_location_id || batch.current_location_id));
+                
+                return (
+                  <tr key={batch.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4 font-black text-slate-900 text-sm">{batch.id}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-0.5 bg-rose-50 text-rose-600 rounded text-[10px] font-bold uppercase">Missing/Lost</span>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-slate-700 text-sm">{batch.quantity}</td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-500">{loc?.name || 'Unknown'}</td>
+                    <td className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase">{new Date(batch.created_at).toLocaleDateString()}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1 text-rose-500 font-black text-[10px] uppercase">
+                        <Skull size={12} /> Written Off
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {batches.filter(b => b.status === 'Lost').length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic text-sm">No write-offs recorded.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Report Loss Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-8 py-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skull size={20} className="text-rose-400" />
+                <h3 className="font-black text-sm uppercase tracking-widest">Loss Investigation Terminal</h3>
               </div>
-              {isReadOnly && <Lock size={14} className="text-slate-500" />}
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                <XCircle size={24} />
+              </button>
             </div>
 
-            <form onSubmit={handleReportLoss} className="p-8 space-y-8">
+            <form onSubmit={handleReportLoss} className="p-8 space-y-8 max-h-[80vh] overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <label className="block space-y-2">
                   <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Search size={14} /> Investigation Target</span>
                   <select 
-                    disabled={isReadOnly}
+                    required
                     className="w-full border border-slate-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-rose-500 bg-slate-50 outline-none transition-all"
                     value={selectedBatchId}
                     onChange={e => setSelectedBatchId(e.target.value)}
@@ -260,7 +337,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
                 <label className="block space-y-2">
                   <span className="text-xs font-bold text-slate-500 uppercase">Reason for Loss</span>
                   <select 
-                    disabled={isReadOnly}
+                    required
                     className="w-full border border-slate-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-rose-500 bg-slate-50 outline-none"
                     value={lossType}
                     onChange={e => setLossType(e.target.value as LossType)}
@@ -279,32 +356,45 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
                     <div className="grid grid-cols-2 gap-6">
                       <div>
                         <p className="text-[10px] font-black text-slate-400 uppercase">Last Known Loc</p>
-                        <p className="text-sm font-bold text-slate-700">{lastKnown.location}</p>
+                        <p className="text-sm font-black text-slate-700">{lastKnown.location}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-black text-slate-400 uppercase">Primary Driver</p>
-                        <p className="text-sm font-bold text-slate-700">{lastKnown.driver || 'N/A'}</p>
+                        <p className="text-sm font-black text-slate-700">{lastKnown.driver || 'N/A'}</p>
                       </div>
+                      {lastKnown.truck && (
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase">Truck Plate</p>
+                          <p className="text-sm font-black text-slate-700">{lastKnown.truck}</p>
+                        </div>
+                      )}
+                      {lastKnown.thaanUrl && (
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase">THAAN Evidence</p>
+                          <a href={lastKnown.thaanUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600 hover:underline">View Slip</a>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <label className="block space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Actual Qty Lost</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actual Qty Lost</span>
                       <input 
-                        disabled={isReadOnly}
+                        required
                         type="number" 
-                        className="w-full border border-slate-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-rose-500"
+                        max={batches.find(b => b.id === selectedBatchId)?.quantity}
+                        className="w-full border border-slate-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-rose-500 font-bold"
                         value={lostQty}
                         onChange={e => setLostQty(parseInt(e.target.value) || 0)}
                       />
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Incident Date</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incident Date</span>
                       <input 
-                        disabled={isReadOnly}
+                        required
                         type="date" 
-                        className="w-full border border-slate-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-rose-500"
+                        className="w-full border border-slate-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-rose-500 font-bold"
                         value={lossDate}
                         onChange={e => setLossDate(e.target.value)}
                       />
@@ -312,11 +402,14 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
                   </div>
 
                   <label className="block space-y-2">
-                    <span className="text-xs font-bold text-slate-500 uppercase">Audit Summary</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-500 uppercase">Audit Summary / Investigation Notes</span>
+                      <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest">Required</span>
+                    </div>
                     <textarea 
-                      disabled={isReadOnly}
+                      required
                       className="w-full border border-slate-200 rounded-xl p-4 text-sm h-32 bg-slate-50 resize-none outline-none focus:ring-2 focus:ring-rose-500"
-                      placeholder="Investigation notes..."
+                      placeholder="Detail the investigation findings..."
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
                     />
@@ -324,19 +417,26 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
                 </div>
               )}
 
-              {!isReadOnly && (
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 px-6 py-4 border border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
                 <button 
                   type="submit" 
-                  disabled={!selectedBatchId || isProcessing}
-                  className={`w-full font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest ${!selectedBatchId ? 'bg-slate-100 text-slate-300' : 'bg-rose-600 text-white hover:bg-rose-700'}`}
+                  disabled={!selectedBatchId || isProcessing || !notes}
+                  className={`flex-[2] font-black py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest ${!selectedBatchId || !notes ? 'bg-slate-100 text-slate-300' : 'bg-rose-600 text-white hover:bg-rose-700'}`}
                 >
-                  {isProcessing ? 'Processing...' : 'CONFIRM WRITE-OFF'}
+                  {isProcessing ? 'Processing Forensic Audit...' : 'CONFIRM WRITE-OFF'}
                 </button>
-              )}
+              </div>
             </form>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
