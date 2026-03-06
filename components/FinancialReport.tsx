@@ -23,7 +23,7 @@ import {
   CheckCircle2,
   Info
 } from 'lucide-react';
-import { LocationType, LocationCategory, Batch, Location, FeeSchedule, ThaanSlip, AssetMaster, AssetLoss } from '../types';
+import { LocationType, LocationCategory, Batch, Location, FeeSchedule, ThaanSlip, AssetMaster, AssetLoss, Branch } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface FinancialReportProps {
@@ -31,13 +31,8 @@ interface FinancialReportProps {
 }
 
 const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
-  const getInitialBranch = () => {
-    if (branchContext === 'Kya Sands') return 'Johannesburg Plant';
-    if (branchContext === 'Durban') return 'Cape Town Depot'; 
-    return 'Johannesburg Plant';
-  };
-
-  const [selectedBranch, setSelectedBranch] = useState<string>(getInitialBranch());
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [branches, setBranches] = useState<Branch[]>([]);
   
   const [batches, setBatches] = useState<Batch[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -56,25 +51,20 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured) {
-        setBatches([]);
-        setLocations([]);
-        setFees([]);
-        setThaans([]);
-        setAssets([]);
-        setLosses([]);
         setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       try {
-        const [bRes, lRes, fRes, tRes, aRes, lossRes] = await Promise.all([
+        const [bRes, lRes, fRes, tRes, aRes, lossRes, brRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('locations').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('thaan_slips').select('*'),
           supabase.from('asset_master').select('*'),
-          supabase.from('asset_losses').select('*')
+          supabase.from('asset_losses').select('*'),
+          supabase.from('branches').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);
@@ -83,6 +73,14 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
         if (tRes.data) setThaans(tRes.data);
         if (aRes.data) setAssets(aRes.data);
         if (lossRes.data) setLosses(lossRes.data);
+        if (brRes.data) {
+          setBranches(brRes.data);
+          if (brRes.data.length > 0) {
+            // Try to match branchContext
+            const match = brRes.data.find(b => b.name.includes(branchContext || ''));
+            setSelectedBranchId(match?.id || brRes.data[0].id);
+          }
+        }
       } catch (err) {
         console.error("Financial Fetch Error:", err);
       } finally {
@@ -91,7 +89,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
     };
 
     fetchData();
-  }, []);
+  }, [branchContext]);
 
   /**
    * Action: Run Supabase RPC Accrual Engine
@@ -122,9 +120,9 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
   const branchBatches = useMemo(() => {
     return batches.filter(batch => {
       const loc = locations.find(l => l.id === batch.current_location_id);
-      return loc?.name === selectedBranch;
+      return loc?.branch_id === selectedBranchId;
     });
-  }, [batches, locations, selectedBranch]);
+  }, [batches, locations, selectedBranchId]);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -155,9 +153,9 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
   const branchLosses = useMemo(() => {
     return losses.filter(l => {
       const loc = locations.find(loc => loc.id === l.last_known_location_id);
-      return loc?.name === selectedBranch;
+      return loc?.branch_id === selectedBranchId;
     });
-  }, [losses, locations, selectedBranch]);
+  }, [losses, locations, selectedBranchId]);
 
   const monthlyLossQty = useMemo(() => branchLosses.reduce((sum, l) => sum + l.lost_quantity, 0), [branchLosses]);
   
@@ -192,7 +190,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
         <div>
           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <Building2 className="text-emerald-600" size={24} />
-            Branch Health: {selectedBranch}
+            Branch Health: {branches.find(b => b.id === selectedBranchId)?.name || 'Select Branch'}
           </h3>
           <p className="text-sm text-slate-500 mt-1 uppercase tracking-widest font-bold text-[10px]">Financial Reconciliation • ZAR</p>
         </div>
@@ -202,11 +200,13 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <select 
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
             >
-              <option value="Johannesburg Plant">JHB Plant (Kya Sands)</option>
-              <option value="Cape Town Cold Storage">CT Depot (Epping)</option>
+              <option value="" disabled>Select Branch</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -305,23 +305,23 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
                         <th className="pb-3 text-right">Exposure (ZAR)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
-                       {branchBatches.map(b => {
-                         const age = Math.floor((Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60 * 24));
-                         const asset = MOCK_ASSETS.find(a => a.id === b.asset_id);
-                         const fee = MOCK_FEES.find(f => f.asset_id === b.asset_id && f.effective_to === null);
-                         const cost = age * (fee?.amount_zar || 0) * b.quantity;
-                         return (
-                           <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-4 font-bold text-slate-800">#{b.id}</td>
-                              <td className="py-4 text-slate-500">{asset?.name}</td>
-                              <td className="py-4"><span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">{b.status}</span></td>
-                              <td className="py-4"><span className={`font-bold ${age > 60 ? 'text-rose-600' : 'text-slate-600'}`}>{age} Days</span></td>
-                              <td className="py-4 text-right font-bold text-slate-800">R {formatCurrency(cost)}</td>
-                           </tr>
-                         );
-                       })}
-                    </tbody>
+                        <tbody className="divide-y divide-slate-50">
+                           {branchBatches.map(b => {
+                             const age = Math.floor((Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                             const asset = assets.find(a => a.id === b.asset_id);
+                             const fee = fees.find(f => f.asset_id === b.asset_id && f.effective_to === null && f.fee_type.includes('Daily Rental'));
+                             const cost = age * (fee?.amount_zar || 0) * b.quantity;
+                             return (
+                               <tr key={b.id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="py-4 font-bold text-slate-800">#{b.id}</td>
+                                  <td className="py-4 text-slate-500">{asset?.name}</td>
+                                  <td className="py-4"><span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">{b.status}</span></td>
+                                  <td className="py-4"><span className={`font-bold ${age > 60 ? 'text-rose-600' : 'text-slate-600'}`}>{age} Days</span></td>
+                                  <td className="py-4 text-right font-bold text-slate-800">R {formatCurrency(cost)}</td>
+                               </tr>
+                             );
+                           })}
+                        </tbody>
                  </table>
               </div>
            </div>

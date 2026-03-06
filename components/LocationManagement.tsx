@@ -38,6 +38,8 @@ const LocationManagement: React.FC = () => {
 
   // Branch Form State
   const [isAddingBranch, setIsAddingBranch] = useState(false);
+  const [isEditingBranch, setIsEditingBranch] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [newBranch, setNewBranch] = useState({ id: '', name: '' });
 
   // Form State
@@ -114,6 +116,48 @@ const LocationManagement: React.FC = () => {
       setNewBranch({ id: '', name: '' });
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to create branch", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleUpdateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBranch) return;
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('branches')
+          .update({ name: editingBranch.name })
+          .eq('id', editingBranch.id);
+        if (error) throw error;
+      }
+      setBranches(prev => prev.map(b => b.id === editingBranch.id ? editingBranch : b));
+      setNotification({ msg: `Branch "${editingBranch.name}" updated`, type: 'success' });
+      setIsEditingBranch(false);
+      setEditingBranch(null);
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to update branch", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleDeleteBranch = async (id: string) => {
+    if (!window.confirm("Delete this branch? This will fail if there are locations assigned to it.")) return;
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.from('branches').delete().eq('id', id);
+        if (error) throw error;
+      }
+      setBranches(prev => prev.filter(b => b.id !== id));
+      setNotification({ msg: "Branch deleted successfully", type: 'success' });
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to delete branch", type: 'error' });
     } finally {
       setIsLoading(false);
       setTimeout(() => setNotification(null), 3000);
@@ -301,6 +345,41 @@ const LocationManagement: React.FC = () => {
         </div>
       )}
 
+      {isEditingBranch && editingBranch && (
+        <div className="bg-white p-8 rounded-3xl border-2 border-amber-500 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="flex justify-between items-center mb-6">
+            <h4 className="font-black text-sm uppercase tracking-widest text-slate-900">Edit Branch: {editingBranch.id}</h4>
+            <button onClick={() => { setIsEditingBranch(false); setEditingBranch(null); }} className="text-slate-400 hover:text-slate-600">Close</button>
+          </div>
+          <form onSubmit={handleUpdateBranch} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Name</label>
+              <input 
+                required
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={editingBranch.name}
+                onChange={e => setEditingBranch({...editingBranch, name: e.target.value})}
+              />
+            </div>
+            <div className="md:col-span-2 pt-4 border-t border-slate-100 flex gap-4">
+              <button 
+                type="button"
+                onClick={() => { setIsEditingBranch(false); setEditingBranch(null); }}
+                className="flex-1 bg-slate-100 text-slate-600 font-black py-4 rounded-2xl hover:bg-slate-200 transition-all"
+              >
+                CANCEL
+              </button>
+              <button 
+                type="submit"
+                className="flex-[2] bg-amber-500 text-white font-black py-4 rounded-2xl hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
+              >
+                UPDATE BRANCH
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {isAdding && (
         <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="flex justify-between items-center mb-6">
@@ -457,6 +536,47 @@ const LocationManagement: React.FC = () => {
           </form>
         </div>
       )}
+
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-8 py-6 bg-slate-50 border-b border-slate-200">
+          <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Branch Registry</h4>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
+                <th className="px-8 py-5">Branch ID</th>
+                <th className="px-8 py-5">Branch Name</th>
+                <th className="px-8 py-5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {branches.map(branch => (
+                <tr key={branch.id} className="hover:bg-slate-50/50 transition-colors group">
+                  <td className="px-8 py-5 font-bold text-slate-900">{branch.id}</td>
+                  <td className="px-8 py-5 font-bold text-slate-700">{branch.name}</td>
+                  <td className="px-8 py-5 text-right">
+                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => { setEditingBranch(branch); setIsEditingBranch(true); setIsAddingBranch(false); }}
+                        className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-amber-600 hover:border-amber-200 transition-all shadow-sm"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteBranch(branch.id)}
+                        className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-8 py-6 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-center gap-4">

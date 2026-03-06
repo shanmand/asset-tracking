@@ -218,6 +218,21 @@ ALTER TABLE public.claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.claim_audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE public.tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'Pending', -- Pending, In Progress, Completed
+    priority TEXT DEFAULT 'Medium', -- Low, Medium, High
+    due_date DATE,
+    assigned_to UUID REFERENCES public.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "tasks_select" ON public.tasks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "tasks_manage" ON public.tasks FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
 -- Helper function to check if user is admin
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$

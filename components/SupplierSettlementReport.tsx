@@ -52,12 +52,24 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
   const [isLoading, setIsLoading] = useState(true);
 
   const currentMonth = useMemo(() => {
-    if (startDate && endDate) return `${startDate} to ${endDate}`;
-    return "May 2025";
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      return `${start.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })} to ${end.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    const now = new Date();
+    return now.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
   }, [startDate, endDate]);
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {
+    // Set default dates to current month
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setStartDate(firstDay.toISOString().split('T')[0]);
+    setEndDate(lastDay.toISOString().split('T')[0]);
+
     const fetchData = async () => {
       if (!isSupabaseConfigured) {
         setBatches(MOCK_BATCHES);

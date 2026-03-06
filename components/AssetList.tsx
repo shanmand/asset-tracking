@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2 } from 'lucide-react';
+import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -49,6 +49,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   );
 
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<AssetMaster | null>(null);
   const [newAsset, setNewAsset] = useState<Partial<AssetMaster>>({
     id: '',
     name: '',
@@ -86,8 +88,61 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
       console.error("Add Asset Error:", err);
       alert("Failed to add asset. Check RLS policies.");
     } finally {
-      setIsLoading(true); // Trigger refresh
-      window.location.reload(); // Simple refresh to sync fees
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAsset) return;
+    
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('asset_master')
+          .update({
+            name: editingAsset.name,
+            type: editingAsset.type,
+            dimensions: editingAsset.dimensions,
+            material: editingAsset.material,
+            billing_model: editingAsset.billing_model,
+            ownership_type: editingAsset.ownership_type
+          })
+          .eq('id', editingAsset.id);
+        if (error) throw error;
+      }
+      
+      setAssets(prev => prev.map(a => a.id === editingAsset.id ? editingAsset : a));
+      setIsEditing(false);
+      setEditingAsset(null);
+    } catch (err) {
+      console.error("Edit Asset Error:", err);
+      alert("Failed to update asset.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteAsset = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this asset? This action cannot be undone and may fail if the asset is referenced in other records.")) return;
+    
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('asset_master')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+      }
+      
+      setAssets(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      console.error("Delete Asset Error:", err);
+      alert("Failed to delete asset. It might be in use.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -180,9 +235,22 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     {isAdmin && (
-                      <button className="p-2 text-slate-300 hover:text-slate-600">
-                        <MoreVertical size={18} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => { setEditingAsset(asset); setIsEditing(true); }}
+                          className="p-2 text-slate-400 hover:text-amber-600 transition-colors"
+                          title="Edit Asset"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteAsset(asset.id)}
+                          className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
+                          title="Delete Asset"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -289,6 +357,94 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                   className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold"
                 >
                   Save Asset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditing && editingAsset && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
+            <div className="p-6 bg-amber-600 text-white">
+              <h3 className="text-lg font-bold">Edit Asset: {editingAsset.id}</h3>
+              <p className="text-xs text-amber-100">Update the specifications for this asset type.</p>
+            </div>
+            <form onSubmit={handleEditAsset} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Asset Name</label>
+                <input 
+                  required
+                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                  value={editingAsset.name}
+                  onChange={e => setEditingAsset({...editingAsset, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Type</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={editingAsset.type}
+                    onChange={e => setEditingAsset({...editingAsset, type: e.target.value as any})}
+                  >
+                    <option value="Crate">Crate</option>
+                    <option value="Pallet">Pallet</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Material</label>
+                  <input 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={editingAsset.material}
+                    onChange={e => setEditingAsset({...editingAsset, material: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Dimensions</label>
+                <input 
+                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                  value={editingAsset.dimensions}
+                  onChange={e => setEditingAsset({...editingAsset, dimensions: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Billing Model</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={editingAsset.billing_model}
+                    onChange={e => setEditingAsset({...editingAsset, billing_model: e.target.value as any})}
+                  >
+                    {Object.values(BillingModel).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Ownership</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={editingAsset.ownership_type}
+                    onChange={e => setEditingAsset({...editingAsset, ownership_type: e.target.value as any})}
+                  >
+                    {Object.values(OwnershipType).map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => { setIsEditing(false); setEditingAsset(null); }}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold"
+                >
+                  Update Asset
                 </button>
               </div>
             </form>

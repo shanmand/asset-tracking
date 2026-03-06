@@ -230,3 +230,14 @@ export interface AuditLog {
   user_id: string;
   timestamp: string;
 }
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: 'Pending' | 'In Progress' | 'Completed';
+  priority: 'Low' | 'Medium' | 'High';
+  due_date: string;
+  assigned_to?: string;
+  created_at: string;
+}

@@ -46,6 +46,7 @@ import AdminPanel from './components/AdminPanel';
 import LogisticsRegistry from './components/LogisticsRegistry';
 import BatchManagement from './components/BatchManagement';
 import ReportsView from './components/ReportsView';
+import TaskManagement from './components/TaskManagement';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
 
@@ -66,7 +67,8 @@ enum NavItem {
   ADMIN = 'admin-panel',
   LOGISTICS_REGISTRY = 'logistics-registry',
   BATCH_MANAGEMENT = 'batch-management',
-  REPORTS = 'reports'
+  REPORTS = 'reports',
+  TASKS = 'tasks'
 }
 
 const AppContent: React.FC = () => {
@@ -118,6 +120,7 @@ const AppContent: React.FC = () => {
       case NavItem.LOGISTICS_REGISTRY: return <LogisticsRegistry />;
       case NavItem.BATCH_MANAGEMENT: return <BatchManagement />;
       case NavItem.REPORTS: return <ReportsView />;
+      case NavItem.TASKS: return <TaskManagement />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -142,6 +145,7 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => setActiveTab(NavItem.LOGISTICS)} icon={<ClipboardList size={18} />} label="Capture Movement" />
           <SidebarButton active={activeTab === NavItem.LOSSES} onClick={() => setActiveTab(NavItem.LOSSES)} icon={<Skull size={18} />} label="Report Loss" />
           <SidebarButton active={activeTab === NavItem.CLAIMS} onClick={() => setActiveTab(NavItem.CLAIMS)} icon={<Gavel size={18} />} label="Claims Center" />
+          <SidebarButton active={activeTab === NavItem.TASKS} onClick={() => setActiveTab(NavItem.TASKS)} icon={<ClipboardList size={18} />} label="Task Management" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Financials</div>
           <SidebarButton active={activeTab === NavItem.FINANCIALS} onClick={() => setActiveTab(NavItem.FINANCIALS)} icon={<BarChart3 size={18} />} label="Accrual Engine" />
