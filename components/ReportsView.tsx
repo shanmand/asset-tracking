@@ -18,14 +18,17 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType } from '../types';
+import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType, LogisticsTrace } from '../types';
 
 const ReportsView: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [traces, setTraces] = useState<LogisticsTrace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [activeTab, setActiveTab] = useState<'inventory' | 'trace'>('inventory');
 
   // Filters
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -41,16 +44,18 @@ const ReportsView: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const [bRes, lRes, aRes, brRes] = await Promise.all([
+        const [bRes, lRes, aRes, brRes, tRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('locations').select('*'),
           supabase.from('asset_master').select('*'),
-          supabase.from('branches').select('*')
+          supabase.from('branches').select('*'),
+          supabase.from('vw_master_logistics_trace').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);
         if (lRes.data) setLocations(lRes.data);
         if (aRes.data) setAssets(aRes.data);
+        if (tRes.data) setTraces(tRes.data);
         
         if (brRes.data) {
           setBranches(brRes.data);
@@ -99,8 +104,29 @@ const ReportsView: React.FC = () => {
       return acc;
     }, {});
 
-    return { totalUnits, byLocation, byAsset };
-  }, [filteredData, locations, assets]);
+    // Trace Stats
+    const traceData = traces.filter(t => selectedBranch === 'all' || t.custodian_branch_id === selectedBranch);
+    
+    // Get latest condition for each batch at each location
+    const latestTraceByBatch = traceData.reduce((acc: Record<string, LogisticsTrace>, t: LogisticsTrace) => {
+      if (!acc[t.batch_id] || new Date(t.timestamp).getTime() > new Date(acc[t.batch_id].timestamp).getTime()) {
+        acc[t.batch_id] = t;
+      }
+      return acc;
+    }, {});
+
+    const conditionSummary = Object.values(latestTraceByBatch).reduce((acc: Record<string, { clean: number, dirty: number, damaged: number }>, t: LogisticsTrace) => {
+      if (!acc[t.to_location_name]) {
+        acc[t.to_location_name] = { clean: 0, dirty: 0, damaged: 0 };
+      }
+      if (t.condition === 'Clean') acc[t.to_location_name].clean += t.quantity;
+      else if (t.condition === 'Dirty') acc[t.to_location_name].dirty += t.quantity;
+      else if (t.condition === 'Damaged') acc[t.to_location_name].damaged += t.quantity;
+      return acc;
+    }, {});
+
+    return { totalUnits, byLocation, byAsset, conditionSummary };
+  }, [filteredData, locations, assets, traces, selectedBranch]);
 
   const handleExportCSV = () => {
     const headers = ['Batch ID', 'Asset', 'Asset Type', 'Location', 'Partner Type', 'Quantity'];
@@ -197,6 +223,21 @@ const ReportsView: React.FC = () => {
 
       {/* Filters & Search */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+        <div className="flex border-b border-slate-100 mb-4">
+          <button 
+            onClick={() => setActiveTab('inventory')}
+            className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'inventory' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400'}`}
+          >
+            Inventory Manifest
+          </button>
+          <button 
+            onClick={() => setActiveTab('trace')}
+            className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'trace' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400'}`}
+          >
+            Logistics Trace Report
+          </button>
+        </div>
+
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -238,87 +279,136 @@ const ReportsView: React.FC = () => {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Distribution by Location */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-            <MapPin size={18} className="text-rose-500" />
-            <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Distribution by Location</h3>
+      {activeTab === 'inventory' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Distribution by Location */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+              <MapPin size={18} className="text-rose-500" />
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Distribution by Location</h3>
+            </div>
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[400px]">
+              {Object.entries(stats.byLocation).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([loc, qty]) => (
+                <div key={loc} className="space-y-2">
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-slate-600">{loc}</span>
+                    <span className="text-slate-900">{(qty as number).toLocaleString()} Units</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-slate-900 h-full rounded-full transition-all duration-1000" 
+                      style={{ width: `${((qty as number) / (stats.totalUnits || 1)) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {Object.keys(stats.byLocation).length === 0 && (
+                <div className="py-20 text-center text-slate-400 italic text-sm">No data for current filters.</div>
+              )}
+            </div>
           </div>
-          <div className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[400px]">
-            {Object.entries(stats.byLocation).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([loc, qty]) => (
-              <div key={loc} className="space-y-2">
-                <div className="flex justify-between items-center text-xs font-bold">
-                  <span className="text-slate-600">{loc}</span>
-                  <span className="text-slate-900">{(qty as number).toLocaleString()} Units</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="bg-slate-900 h-full rounded-full transition-all duration-1000" 
-                    style={{ width: `${((qty as number) / (stats.totalUnits || 1)) * 100}%` }}
-                  />
-                </div>
+
+          {/* Detailed Data Table */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database size={18} className="text-blue-500" />
+                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Inventory Manifest</h3>
               </div>
-            ))}
-            {Object.keys(stats.byLocation).length === 0 && (
-              <div className="py-20 text-center text-slate-400 italic text-sm">No data for current filters.</div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredData.length} Batches Found</span>
+            </div>
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
+                    <th className="px-6 py-4">Batch ID</th>
+                    <th className="px-6 py-4">Asset</th>
+                    <th className="px-6 py-4">Location</th>
+                    <th className="px-6 py-4 text-right">Quantity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filteredData.slice(0, 50).map(batch => {
+                    const loc = locations.find(l => l.id === batch.current_location_id);
+                    const asset = assets.find(a => a.id === batch.asset_id);
+                    return (
+                      <tr key={batch.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 text-xs font-black text-slate-900">{batch.id}</td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-bold text-slate-700">{asset?.name}</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{asset?.type}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-bold text-slate-700">{loc?.name}</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{loc?.partner_type}</p>
+                        </td>
+                        <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{batch.quantity.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                  {filteredData.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-20 text-center text-slate-400 italic text-sm">No inventory records match your criteria.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {filteredData.length > 50 && (
+              <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing first 50 of {filteredData.length} records</p>
+              </div>
             )}
           </div>
         </div>
-
-        {/* Detailed Data Table */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Database size={18} className="text-blue-500" />
-              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Inventory Manifest</h3>
-            </div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredData.length} Batches Found</span>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+            <History size={18} className="text-emerald-500" />
+            <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Custodian Branch Condition Report</h3>
           </div>
-          <div className="overflow-x-auto flex-1">
+          <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
-                  <th className="px-6 py-4">Batch ID</th>
-                  <th className="px-6 py-4">Asset</th>
                   <th className="px-6 py-4">Location</th>
-                  <th className="px-6 py-4 text-right">Quantity</th>
+                  <th className="px-6 py-4 text-center">Clean</th>
+                  <th className="px-6 py-4 text-center">Dirty</th>
+                  <th className="px-6 py-4 text-center">Damaged</th>
+                  <th className="px-6 py-4 text-right">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredData.slice(0, 50).map(batch => {
-                  const loc = locations.find(l => l.id === batch.current_location_id);
-                  const asset = assets.find(a => a.id === batch.asset_id);
+                {Object.entries(stats.conditionSummary).map(([locName, counts]) => {
+                  const c = counts as { clean: number, dirty: number, damaged: number };
                   return (
-                    <tr key={batch.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 text-xs font-black text-slate-900">{batch.id}</td>
-                      <td className="px-6 py-4">
-                        <p className="text-xs font-bold text-slate-700">{asset?.name}</p>
-                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{asset?.type}</p>
+                    <tr key={locName} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 text-xs font-bold text-slate-900">{locName}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black">{c.clean.toLocaleString()}</span>
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="text-xs font-bold text-slate-700">{loc?.name}</p>
-                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{loc?.partner_type}</p>
+                      <td className="px-6 py-4 text-center">
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black">{c.dirty.toLocaleString()}</span>
                       </td>
-                      <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{batch.quantity.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-lg text-[10px] font-black">{c.damaged.toLocaleString()}</span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-xs font-black text-slate-900">
+                        {(c.clean + c.dirty + c.damaged).toLocaleString()}
+                      </td>
                     </tr>
                   );
                 })}
-                {filteredData.length === 0 && (
+                {Object.keys(stats.conditionSummary).length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-20 text-center text-slate-400 italic text-sm">No inventory records match your criteria.</td>
+                    <td colSpan={5} className="py-20 text-center text-slate-400 italic text-sm">No trace data found for this branch.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-          {filteredData.length > 50 && (
-            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-center">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing first 50 of {filteredData.length} records</p>
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 };

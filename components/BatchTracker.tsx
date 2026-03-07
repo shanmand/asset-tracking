@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
 import { Package, Truck, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle, User } from 'lucide-react';
-import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule } from '../types';
+import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
 
@@ -10,6 +10,7 @@ const BatchTracker: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
   const [thaans, setThaans] = useState<ThaanSlip[]>(isSupabaseConfigured ? [] : MOCK_THAANS);
   const [movements, setMovements] = useState<BatchMovement[]>(isSupabaseConfigured ? [] : MOCK_MOVEMENTS);
+  const [traces, setTraces] = useState<LogisticsTrace[]>([]);
   const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -38,10 +39,11 @@ const BatchTracker: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const [batchesRes, thaansRes, movesRes, locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
+      const [batchesRes, thaansRes, movesRes, tracesRes, locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
         supabase.from('batches').select('*'),
         supabase.from('thaan_slips').select('*'),
         supabase.from('batch_movements').select('*'),
+        supabase.from('vw_master_logistics_trace').select('*'),
         supabase.from('locations').select('*'),
         supabase.from('trucks').select('*'),
         supabase.from('drivers').select('*'),
@@ -57,6 +59,7 @@ const BatchTracker: React.FC = () => {
       }
       if (thaansRes.data) setThaans(thaansRes.data);
       if (movesRes.data) setMovements(movesRes.data);
+      if (tracesRes.data) setTraces(tracesRes.data);
       if (locsRes.data) setLocations(locsRes.data);
       if (trucksRes.data) setTrucks(trucksRes.data);
       if (driversRes.data) setDrivers(driversRes.data);
@@ -74,7 +77,7 @@ const BatchTracker: React.FC = () => {
   }, []);
 
   const currentBatch = batches.find(b => b.id === selectedBatchId);
-  const currentMovements = movements.filter(m => m.batch_id === selectedBatchId);
+  const currentTraces = traces.filter(t => t.batch_id === selectedBatchId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const asset = assetsMaster.find(a => a.id === currentBatch?.asset_id);
   const thaan = thaans.find(t => t.batch_id === selectedBatchId);
 
@@ -181,23 +184,20 @@ const BatchTracker: React.FC = () => {
               </h3>
 
               <div className="relative pl-8 border-l-2 border-slate-100 space-y-12">
-                {currentMovements.map((mv, idx) => {
-                  const from = locations.find(l => l.id === mv.from_location_id);
-                  const to = locations.find(l => l.id === mv.to_location_id);
-                  const truck = mv.truck_id ? trucks.find(t => t.id === mv.truck_id) : null;
-                  const driver = mv.driver_id ? drivers.find(d => d.id === mv.driver_id) : null;
-
+                {currentTraces.map((trace, idx) => {
                   return (
-                    <div key={mv.id} className="relative">
+                    <div key={trace.movement_id} className="relative">
                       <div className="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{new Date(mv.timestamp).toLocaleString('en-ZA')}</p>
-                          <h4 className="font-bold text-slate-800 text-lg mt-1">{from?.name} &rarr; {to?.name}</h4>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                            On {new Date(trace.timestamp).toLocaleDateString('en-ZA')}, {trace.driver_name || 'Unknown Driver'} moved {trace.quantity} crates to {trace.to_location_name} using Truck {trace.truck_plate || 'N/A'}
+                          </p>
+                          <h4 className="font-bold text-slate-800 text-lg mt-1">{trace.from_location_name} &rarr; {trace.to_location_name}</h4>
                           <div className="flex gap-2 mt-2">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${mv.condition === 'Clean' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{mv.condition}</span>
-                            {truck && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><Truck size={10} /> {truck.plate_number}</span>}
-                            {driver && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><User size={10} /> {driver.full_name}</span>}
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${trace.condition === 'Clean' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{trace.condition}</span>
+                            {trace.truck_plate && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><Truck size={10} /> {trace.truck_plate}</span>}
+                            {trace.driver_name && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><User size={10} /> {trace.driver_name}</span>}
                           </div>
                         </div>
                       </div>

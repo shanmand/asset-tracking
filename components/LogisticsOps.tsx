@@ -168,14 +168,14 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           const { error: moveError } = await supabase
             .from('batch_movements')
             .insert([{
-              batch_id: targetBatchId,
-              from_location_id: origin,
-              to_location_id: destination,
-              truck_id: truckId,
-              driver_id: driverId,
+              batch_id: String(targetBatchId),
+              from_location_id: String(origin),
+              to_location_id: String(destination),
+              truck_id: String(truckId),
+              driver_id: String(driverId),
               timestamp: new Date(movementDate).toISOString(),
               condition: condition,
-              origin_user_id: currentUser.id
+              origin_user_id: String(currentUser.id)
             }]);
 
           if (moveError) throw moveError;

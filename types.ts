@@ -165,6 +165,21 @@ export interface BatchMovement {
   transaction_date?: string;
 }
 
+export interface LogisticsTrace {
+  movement_id: string;
+  batch_id: string;
+  transaction_date: string;
+  timestamp: string;
+  driver_name: string;
+  quantity: number;
+  to_location_name: string;
+  to_location_id: string;
+  from_location_name: string;
+  truck_plate: string;
+  condition: MovementCondition;
+  custodian_branch_id: string;
+}
+
 export interface BatchVerification {
   id: string;
   batch_id: string;

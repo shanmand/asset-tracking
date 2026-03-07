@@ -11,32 +11,50 @@ const SchemaView: React.FC = () => {
   const [simClaimReceived, setSimClaimReceived] = useState(false);
   const [simDays, setSimDays] = useState(10);
   const [simAssetType, setSimAssetType] = useState<'Supermarket' | 'QSR'>('Supermarket');
+  const [simSupplier, setSimSupplier] = useState<'Lupo JHB' | 'Durban Crates' | 'Cape Logistics'>('Lupo JHB');
+  const [simIsSettled, setSimIsSettled] = useState(false);
+  const [simDiscount, setSimDiscount] = useState(0);
+
+  const supplierRates = {
+    'Lupo JHB': 5.50,
+    'Durban Crates': 6.25,
+    'Cape Logistics': 4.80
+  };
 
   const entities = [
-    { name: 'asset_master', fields: ['id', 'name', 'type', 'dimensions', 'material', 'billing_model', 'ownership_type'] },
+    { name: 'asset_master', fields: ['id', 'name', 'type', 'billing_model', 'ownership_type', 'supplier_id (FK)'] },
     { name: 'fee_schedule', fields: ['id', 'asset_id (FK)', 'fee_type', 'amount_zar', 'effective_from', 'effective_to'] },
-    { name: 'locations', fields: ['id', 'name', 'type', 'category (Home/External)', 'branch_id (FK)', 'partner_type'] },
-    { name: 'batches', fields: ['id', 'asset_id (FK)', 'quantity', 'current_location_id (FK)', 'created_at', 'status'] },
-    { name: 'asset_losses', fields: ['id', 'batch_id (FK)', 'loss_type', 'lost_quantity', 'last_known_location_id (FK)', 'timestamp', 'reported_by (FK)', 'notes'] },
-    { name: 'batch_verifications', fields: ['id', 'batch_id (FK)', 'verified_by (FK)', 'received_quantity', 'expected_quantity', 'variance', 'timestamp'] },
+    { name: 'locations', fields: ['id', 'name', 'type', 'category', 'branch_id (FK)', 'partner_type'] },
+    { name: 'business_parties', fields: ['id', 'name', 'party_type (Customer/Supplier)', 'branch_id (FK)'] },
+    { name: 'batches', fields: ['id', 'asset_id (FK)', 'quantity', 'current_location_id (FK)', 'status', 'is_settled'] },
+    { name: 'batch_movements', fields: ['id', 'batch_id (FK)', 'from_location_id (FK)', 'to_location_id (FK)', 'driver_id (FK)', 'truck_id (FK)', 'transaction_date'] },
+    { name: 'claims', fields: ['id', 'batch_id (FK)', 'type', 'status', 'amount_claimed_zar'] },
+    { name: 'settlements', fields: ['id', 'supplier_id (FK)', 'gross_liability', 'cash_paid', 'discount_amount', 'start_date', 'end_date'] },
+    { name: 'trucks', fields: ['id', 'plate_number'] },
+    { name: 'drivers', fields: ['id', 'full_name', 'contact_number'] },
     { name: 'thaan_slips', fields: ['id', 'batch_id (FK)', 'doc_url', 'is_signed', 'signed_at'] },
-    { name: 'users', fields: ['id', 'name', 'role', 'branch_id'] },
-    { name: 'branches', fields: ['id', 'name', 'created_at'] }
+    { name: 'asset_losses', fields: ['id', 'batch_id (FK)', 'loss_type', 'lost_quantity', 'is_settled'] }
   ];
 
   const calculateSimLiability = () => {
-    let base = simAssetType === 'Supermarket' ? 5.00 : 120.00;
+    if (simIsSettled) return 0;
+    
+    let base = simAssetType === 'Supermarket' ? supplierRates[simSupplier] : 120.00;
     let quantity = 100;
+    let total = 0;
+
     if (simAssetType === 'Supermarket') {
       let activeDays = simDays;
       if (simCondition === 'Clean' && simThaan) activeDays = Math.min(simDays, 5);
       else if (simCondition === 'Damaged' && simClaimReceived) activeDays = Math.min(simDays, 8);
-      return activeDays * base * quantity;
+      total = activeDays * base * quantity;
     } else {
       let fee = base * quantity;
       if (simThaan) fee = 0;
-      return fee;
+      total = fee;
     }
+
+    return Math.max(0, total - simDiscount);
   };
 
   return (
@@ -325,12 +343,121 @@ WITH CHECK (bucket_id = 'thaan-slips');`}
 
       {activeView === 'simulator' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white p-10 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="bg-white p-10 rounded-3xl border border-slate-200 shadow-sm space-y-8">
             <h3 className="font-black text-slate-800 text-xs uppercase tracking-[0.2em] flex items-center gap-3">
               <ShieldCheck className="text-emerald-500" size={20} />
               Liability Engine Simulator
             </h3>
-            <div className="text-6xl font-black text-slate-900">R {calculateSimLiability().toLocaleString()}</div>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Supplier (Business Party)</label>
+                  <select 
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={simSupplier}
+                    onChange={(e) => setSimSupplier(e.target.value as any)}
+                  >
+                    <option value="Lupo JHB">Lupo JHB (R 5.50/day)</option>
+                    <option value="Durban Crates">Durban Crates (R 6.25/day)</option>
+                    <option value="Cape Logistics">Cape Logistics (R 4.80/day)</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Category</label>
+                  <select 
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={simAssetType}
+                    onChange={(e) => setSimAssetType(e.target.value as any)}
+                  >
+                    <option value="Supermarket">Supermarket (Rental)</option>
+                    <option value="QSR">QSR (Issue Fee)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Days Elapsed</label>
+                  <input 
+                    type="range" min="1" max="90" 
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                    value={simDays}
+                    onChange={(e) => setSimDays(parseInt(e.target.value))}
+                  />
+                  <div className="text-[10px] font-bold text-slate-500 text-right">{simDays} Days</div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Settlement Status</label>
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button 
+                      onClick={() => setSimIsSettled(false)}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!simIsSettled ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      Accruing
+                    </button>
+                    <button 
+                      onClick={() => setSimIsSettled(true)}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${simIsSettled ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      Settled
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Negotiated Discount (from Settlements)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R</span>
+                  <input 
+                    type="number" 
+                    className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={simDiscount}
+                    onChange={(e) => setSimDiscount(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Liability</p>
+                    <div className="text-5xl font-black text-slate-900 tracking-tighter">R {calculateSimLiability().toLocaleString()}</div>
+                  </div>
+                  <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-600">
+                    <TrendingUp size={32} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 p-10 rounded-3xl border border-slate-800 space-y-6 text-white">
+            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <Zap size={16} className="text-amber-400" />
+              Simulator Logic Notes
+            </h4>
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">Business Party Integration</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Unlike the previous hard-coded model, the simulator now mimics a join between <code>batches</code> and <code>business_parties</code>. Each supplier has a unique rate stored in the <code>fee_schedule</code>.
+                </p>
+              </div>
+              <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Settlement Close-out</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  When a batch is marked <code>is_settled = TRUE</code> via the <code>settlements</code> table, the accrual engine stops the clock. The simulator reflects this by zeroing out liability when 'Settled' is selected.
+                </p>
+              </div>
+              <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-2">Discount Application</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  The final Net Liability is calculated as: <code>(Accrued Rental + Replacement Fees) - (Credits + Settlement Discounts)</code>.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
