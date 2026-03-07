@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_ASSETS, MOCK_FEES } from '../constants';
 import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2, Pencil, Trash2 } from 'lucide-react';
-import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType } from '../types';
+import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType, Location, PartnerType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface AssetListProps {
@@ -12,6 +12,7 @@ interface AssetListProps {
 const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>([]);
+  const [suppliers, setSuppliers] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -26,13 +27,15 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
 
       setIsLoading(true);
       try {
-        const [assetsRes, feesRes] = await Promise.all([
+        const [assetsRes, feesRes, suppliersRes] = await Promise.all([
           supabase.from('asset_master').select('*'),
-          supabase.from('fee_schedule').select('*')
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('locations').select('*').eq('partner_type', PartnerType.SUPPLIER)
         ]);
 
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);
+        if (suppliersRes.data) setSuppliers(suppliersRes.data);
       } catch (err) {
         console.error("Asset List Fetch Error:", err);
       } finally {
@@ -58,7 +61,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     dimensions: '',
     material: '',
     billing_model: BillingModel.DAILY_RENTAL,
-    ownership_type: OwnershipType.EXTERNAL
+    ownership_type: OwnershipType.EXTERNAL,
+    supplier_id: ''
   });
 
   const handleAddAsset = async (e: React.FormEvent) => {
@@ -107,7 +111,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
             dimensions: editingAsset.dimensions,
             material: editingAsset.material,
             billing_model: editingAsset.billing_model,
-            ownership_type: editingAsset.ownership_type
+            ownership_type: editingAsset.ownership_type,
+            supplier_id: editingAsset.supplier_id
           })
           .eq('id', editingAsset.id);
         if (error) throw error;
@@ -344,6 +349,19 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                   </select>
                 </div>
               </div>
+              {newAsset.ownership_type === OwnershipType.EXTERNAL && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Supplier (Owner)</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={newAsset.supplier_id}
+                    onChange={e => setNewAsset({...newAsset, supplier_id: e.target.value})}
+                  >
+                    <option value="">Select Supplier...</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <button 
                   type="button"
@@ -432,6 +450,19 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                   </select>
                 </div>
               </div>
+              {editingAsset.ownership_type === OwnershipType.EXTERNAL && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Supplier (Owner)</label>
+                  <select 
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    value={editingAsset.supplier_id}
+                    onChange={e => setEditingAsset({...editingAsset, supplier_id: e.target.value})}
+                  >
+                    <option value="">Select Supplier...</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <button 
                   type="button"

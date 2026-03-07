@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MOCK_LOCATIONS, MOCK_BATCHES, MOCK_ASSETS, MOCK_FEES } from '../constants';
 import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, TrendingUp, Info, Loader2, Filter, Search, Calendar } from 'lucide-react';
-import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule, Branch } from '../types';
+import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule, Branch, ThaanSlip } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 const InventoryDashboard: React.FC = () => {
@@ -11,6 +11,7 @@ const InventoryDashboard: React.FC = () => {
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [thaanSlips, setThaanSlips] = useState<ThaanSlip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters
@@ -34,12 +35,13 @@ const InventoryDashboard: React.FC = () => {
 
       setIsLoading(true);
       try {
-        const [locsRes, batchesRes, assetsRes, feesRes, branchesRes] = await Promise.all([
+        const [locsRes, batchesRes, assetsRes, feesRes, branchesRes, thaansRes] = await Promise.all([
           supabase.from('locations').select('*'),
           supabase.from('batches').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('fee_schedule').select('*'),
-          supabase.from('branches').select('*')
+          supabase.from('branches').select('*'),
+          supabase.from('thaan_slips').select('*')
         ]);
 
         if (locsRes.data) setLocations(locsRes.data);
@@ -47,6 +49,7 @@ const InventoryDashboard: React.FC = () => {
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);
         if (branchesRes.data) setBranches(branchesRes.data);
+        if (thaansRes.data) setThaanSlips(thaansRes.data);
       } catch (err) {
         console.error("Inventory Fetch Error:", err);
       } finally {
@@ -66,7 +69,7 @@ const InventoryDashboard: React.FC = () => {
       const matchesAsset = selectedAsset === 'all' || inventory.some(b => b.asset_id === selectedAsset);
       
       const matchesDate = inventory.some(b => {
-        const created = new Date(b.created_at);
+        const created = new Date(b.transaction_date || b.created_at);
         return (!startDate || created >= new Date(startDate)) &&
                (!endDate || created <= new Date(endDate));
       }) || (inventory.length === 0 && !startDate && !endDate);
@@ -80,10 +83,17 @@ const InventoryDashboard: React.FC = () => {
     const batch = batches.find(b => b.id === batchId);
     if (!batch) return 0;
 
+    const asset = assets.find(a => a.id === batch.asset_id);
+    if (!asset || asset.ownership_type === 'Internal') return 0;
+
     const fee = fees.find(f => f.asset_id === batch.asset_id && f.effective_to === null);
     if (!fee) return 0;
 
-    const days = Math.floor((Date.now() - new Date(batch.created_at).getTime()) / (1000 * 60 * 60 * 24));
+    const thaan = thaanSlips.find(t => t.batch_id === batch.id && t.is_signed);
+    const endDate = thaan ? new Date(thaan.signed_at).getTime() : Date.now();
+    const startDate = new Date(batch.transaction_date || batch.created_at).getTime();
+
+    const days = Math.max(0, Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)));
     return days * fee.amount_zar * batch.quantity;
   };
 

@@ -138,36 +138,24 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
           // Handle Partial Movement
           if (item.quantity < batch.quantity) {
-            // 1. Reduce original batch quantity
-            const { error: reduceError } = await supabase
-              .from('batches')
-              .update({ quantity: batch.quantity - item.quantity })
-              .eq('id', item.batchId);
-            
-            if (reduceError) throw reduceError;
+            // Use RPC to split the batch atomically
+            const { data: newBatchId, error: splitError } = await supabase.rpc('split_batch', {
+              original_batch_id: item.batchId,
+              move_qty: item.quantity,
+              new_location_id: destination,
+              move_date: movementDate
+            });
 
-            // 2. Create a new batch for the moved portion
-            const newBatchId = `B-${Math.floor(100000 + Math.random() * 900000)}`;
-            const { error: createError } = await supabase
-              .from('batches')
-              .insert([{
-                id: newBatchId,
-                asset_id: batch.asset_id,
-                quantity: item.quantity,
-                current_location_id: destination,
-                status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success',
-                created_at: batch.created_at
-              }]);
-            
-            if (createError) throw createError;
-            targetBatchId = newBatchId;
+            if (splitError) throw splitError;
+            targetBatchId = newBatchId as string;
           } else {
             // Full Movement
             const { error: updateError } = await supabase
               .from('batches')
               .update({ 
                 current_location_id: destination,
-                status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success'
+                status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success',
+                transaction_date: movementDate
               })
               .eq('id', item.batchId);
 

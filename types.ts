@@ -64,7 +64,8 @@ export enum FeeType {
 export enum LossType {
   MISSING = 'Missing/Lost',
   SCRAPPED = 'Scrapped (Unrepairable)',
-  CUSTOMER_LIABLE = 'Customer Liable'
+  CUSTOMER_LIABLE = 'Customer Liable',
+  STOCK_TAKE_VARIANCE = 'Stock Take Variance'
 }
 
 export enum MovementCondition {
@@ -90,6 +91,9 @@ export interface AssetMaster {
   material: string;
   billing_model: BillingModel;
   ownership_type: OwnershipType;
+  supplier_id?: string;
+  is_internal?: boolean;
+  fee_type?: string;
 }
 
 export interface FeeSchedule {
@@ -140,7 +144,12 @@ export interface Batch {
   quantity: number;
   current_location_id: string;
   created_at: string;
-  status: 'Pending' | 'Success' | 'Lost' | 'In-Transit';
+  status: 'Pending' | 'Success' | 'Lost' | 'In-Transit' | 'Settled';
+  is_settled?: boolean;
+  settled_at?: string;
+  transaction_date?: string;
+  transfer_confirmed_by_customer?: boolean;
+  confirmation_date?: string;
 }
 
 export interface BatchMovement {
@@ -153,6 +162,7 @@ export interface BatchMovement {
   timestamp: string;
   condition: MovementCondition;
   origin_user_id: string;
+  transaction_date?: string;
 }
 
 export interface BatchVerification {
@@ -198,6 +208,7 @@ export interface AssetLoss {
   last_thaan_url?: string;
   reported_by: string; // User ID
   timestamp: string;
+  transaction_date?: string;
   notes: string;
   supplier_notified: boolean;
   supplier_invoice_ref?: string;
@@ -239,5 +250,53 @@ export interface Task {
   priority: 'Low' | 'Medium' | 'High';
   due_date: string;
   assigned_to?: string;
+  created_at: string;
+}
+
+export interface StockTake {
+  id: string;
+  location_id: string;
+  take_date: string;
+  performed_by: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface StockTakeItem {
+  id: string;
+  stock_take_id: string;
+  asset_id: string;
+  system_quantity: number;
+  physical_count: number;
+  variance: number;
+}
+
+export interface Settlement {
+  id: string;
+  supplier_id: string;
+  start_date: string;
+  end_date: string;
+  gross_liability: number;
+  discount_amount: number;
+  net_payable: number;
+  settled_by: string;
+  created_at: string;
+}
+
+export interface BusinessParty {
+  id: string;
+  name: string;
+  party_type: 'Customer' | 'Supplier';
+  contact_person?: string;
+  email?: string;
+  phone?: string;
+  created_at: string;
+}
+
+export interface Discount {
+  id: string;
+  settlement_id: string;
+  amount: number;
+  reason: string;
   created_at: string;
 }

@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Globe,
   BarChart3,
+  DollarSign,
   Skull,
   Receipt,
   UserCircle,
@@ -21,7 +22,9 @@ import {
   LogIn,
   Lock,
   ClipboardList,
+  ClipboardCheck,
   AlertTriangle,
+  Flame,
   Settings,
   Database,
   Gavel,
@@ -39,6 +42,7 @@ import InventoryDashboard from './components/InventoryDashboard';
 import FinancialReport from './components/FinancialReport';
 import LossRecorder from './components/LossRecorder';
 import SupplierSettlementReport from './components/SupplierSettlementReport';
+import PaymentSettlement from './components/PaymentSettlement';
 import UserManagement from './components/UserManagement';
 import LocationManagement from './components/LocationManagement';
 import SupabaseConnection from './components/SupabaseConnection';
@@ -47,6 +51,9 @@ import LogisticsRegistry from './components/LogisticsRegistry';
 import BatchManagement from './components/BatchManagement';
 import ReportsView from './components/ReportsView';
 import TaskManagement from './components/TaskManagement';
+import StockTakeModule from './components/StockTakeModule';
+import SettlementModule from './components/SettlementModule';
+import LiabilityHeatmap from './components/LiabilityHeatmap';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
 
@@ -55,6 +62,7 @@ enum NavItem {
   INVENTORY = 'inventory',
   FINANCIALS = 'financials',
   SETTLEMENT = 'settlement',
+  PAYMENT_SETTLEMENT = 'payment-settlement',
   ASSETS = 'assets',
   TRACKER = 'tracker',
   LOGISTICS = 'logistics',
@@ -68,7 +76,10 @@ enum NavItem {
   LOGISTICS_REGISTRY = 'logistics-registry',
   BATCH_MANAGEMENT = 'batch-management',
   REPORTS = 'reports',
-  TASKS = 'tasks'
+  TASKS = 'tasks',
+  STOCK_TAKE = 'stock-take',
+  FINANCE_SETTLEMENT = 'finance-settlement',
+  LIABILITY_HEATMAP = 'liability-heatmap'
 }
 
 const AppContent: React.FC = () => {
@@ -107,6 +118,7 @@ const AppContent: React.FC = () => {
       case NavItem.INVENTORY: return <InventoryDashboard />;
       case NavItem.FINANCIALS: return <FinancialReport branchContext={currentBranchContext as any} />;
       case NavItem.SETTLEMENT: return <SupplierSettlementReport isAdmin={profile?.role_name === UserRole.ADMIN} />;
+      case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.ASSETS: return <AssetList isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.TRACKER: return <BatchTracker />;
       case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
@@ -121,6 +133,9 @@ const AppContent: React.FC = () => {
       case NavItem.BATCH_MANAGEMENT: return <BatchManagement />;
       case NavItem.REPORTS: return <ReportsView />;
       case NavItem.TASKS: return <TaskManagement />;
+      case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.FINANCE_SETTLEMENT: return <SettlementModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.LIABILITY_HEATMAP: return <LiabilityHeatmap />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -146,10 +161,14 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.LOSSES} onClick={() => setActiveTab(NavItem.LOSSES)} icon={<Skull size={18} />} label="Report Loss" />
           <SidebarButton active={activeTab === NavItem.CLAIMS} onClick={() => setActiveTab(NavItem.CLAIMS)} icon={<Gavel size={18} />} label="Claims Center" />
           <SidebarButton active={activeTab === NavItem.TASKS} onClick={() => setActiveTab(NavItem.TASKS)} icon={<ClipboardList size={18} />} label="Task Management" />
+          <SidebarButton active={activeTab === NavItem.STOCK_TAKE} onClick={() => setActiveTab(NavItem.STOCK_TAKE)} icon={<ClipboardCheck size={18} />} label="Stock Take" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Financials</div>
           <SidebarButton active={activeTab === NavItem.FINANCIALS} onClick={() => setActiveTab(NavItem.FINANCIALS)} icon={<BarChart3 size={18} />} label="Accrual Engine" />
           <SidebarButton active={activeTab === NavItem.SETTLEMENT} onClick={() => setActiveTab(NavItem.SETTLEMENT)} icon={<Receipt size={18} />} label="Settlement Audit" />
+          <SidebarButton active={activeTab === NavItem.PAYMENT_SETTLEMENT} onClick={() => setActiveTab(NavItem.PAYMENT_SETTLEMENT)} icon={<DollarSign size={18} />} label="Payment Settlement" />
+          <SidebarButton active={activeTab === NavItem.FINANCE_SETTLEMENT} onClick={() => setActiveTab(NavItem.FINANCE_SETTLEMENT)} icon={<Receipt size={18} />} label="Finance Settlement" />
+          <SidebarButton active={activeTab === NavItem.LIABILITY_HEATMAP} onClick={() => setActiveTab(NavItem.LIABILITY_HEATMAP)} icon={<Flame size={18} />} label="Liability Heatmap" />
           <SidebarButton active={activeTab === NavItem.ASSETS} onClick={() => setActiveTab(NavItem.ASSETS)} icon={<Tags size={18} />} label="Asset Registry" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">System</div>

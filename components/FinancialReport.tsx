@@ -48,6 +48,13 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
   const [rpcLoading, setRpcLoading] = useState(false);
   const [rpcError, setRpcError] = useState<string | null>(null);
 
+  // Location Audit State
+  const [auditLocationId, setAuditLocationId] = useState('');
+  const [auditStartDate, setAuditStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [auditEndDate, setAuditEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [auditResult, setAuditResult] = useState<number | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured) {
@@ -117,6 +124,25 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
     }
   };
 
+  const runLocationAudit = async () => {
+    if (!auditLocationId) return;
+    setAuditLoading(true);
+    setAuditResult(null);
+    try {
+      const { data, error } = await supabase.rpc('calculate_location_liability', {
+        location_id_input: auditLocationId,
+        start_date: auditStartDate,
+        end_date: auditEndDate
+      });
+      if (error) throw error;
+      setAuditResult(data || 0);
+    } catch (err: any) {
+      console.error("Location Audit Error:", err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
   const branchBatches = useMemo(() => {
     return batches.filter(batch => {
       const loc = locations.find(l => l.id === batch.current_location_id);
@@ -128,16 +154,20 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
 
   const branchAccruedRental = useMemo(() => {
     return branchBatches.reduce((total, batch) => {
-      const loc = locations.find(l => l.id === batch.current_location_id);
+      const asset = assets.find(a => a.id === batch.asset_id);
+      if (!asset || asset.ownership_type === 'Internal') return total;
+
       const fee = fees.find(f => f.asset_id === batch.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
-      
-      if (fee && loc && loc.type !== LocationType.AT_CUSTOMER && loc.type !== LocationType.RETURNING) {
-        const ageDays = Math.floor((Date.now() - new Date(batch.created_at).getTime()) / (1000 * 60 * 60 * 24));
-        return total + (batch.quantity * fee.amount_zar * ageDays);
-      }
-      return total;
+      if (!fee) return total;
+
+      const thaan = thaans.find(t => t.batch_id === batch.id && t.is_signed);
+      const endDate = thaan ? new Date(thaan.signed_at).getTime() : Date.now();
+      const startDate = new Date(batch.transaction_date || batch.created_at).getTime();
+
+      const ageDays = Math.max(0, Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)));
+      return total + (batch.quantity * fee.amount_zar * ageDays);
     }, 0);
-  }, [branchBatches, locations, fees]);
+  }, [branchBatches, assets, fees, thaans]);
 
   const branchUncreditedIssueFees = useMemo(() => {
     return branchBatches.reduce((total, batch) => {
@@ -307,14 +337,24 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
                     </thead>
                         <tbody className="divide-y divide-slate-50">
                            {branchBatches.map(b => {
-                             const age = Math.floor((Date.now() - new Date(b.created_at).getTime()) / (1000 * 60 * 60 * 24));
                              const asset = assets.find(a => a.id === b.asset_id);
+                             if (!asset) return null;
+
+                             const thaan = thaans.find(t => t.batch_id === b.id && t.is_signed);
+                             const endDate = thaan ? new Date(thaan.signed_at).getTime() : Date.now();
+                             const startDate = new Date(b.transaction_date || b.created_at).getTime();
+                             const age = Math.max(0, Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)));
+                             
                              const fee = fees.find(f => f.asset_id === b.asset_id && f.effective_to === null && f.fee_type.includes('Daily Rental'));
-                             const cost = age * (fee?.amount_zar || 0) * b.quantity;
+                             const cost = asset.ownership_type === 'Internal' ? 0 : age * (fee?.amount_zar || 0) * b.quantity;
+                             
                              return (
                                <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                                   <td className="py-4 font-bold text-slate-800">#{b.id}</td>
-                                  <td className="py-4 text-slate-500">{asset?.name}</td>
+                                  <td className="py-4 text-slate-500">
+                                     {asset.name}
+                                     {asset.ownership_type === 'Internal' && <span className="ml-2 text-[8px] bg-slate-100 px-1 rounded">OWNED</span>}
+                                  </td>
                                   <td className="py-4"><span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">{b.status}</span></td>
                                   <td className="py-4"><span className={`font-bold ${age > 60 ? 'text-rose-600' : 'text-slate-600'}`}>{age} Days</span></td>
                                   <td className="py-4 text-right font-bold text-slate-800">R {formatCurrency(cost)}</td>
@@ -328,6 +368,62 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
         </div>
 
         <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+            <div className="px-6 py-4 bg-slate-900 border-b border-slate-800">
+              <h4 className="font-bold text-white text-sm flex items-center gap-2"><Calculator size={18} className="text-emerald-400" /> Location Liability Audit</h4>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Location</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={auditLocationId}
+                  onChange={e => setAuditLocationId(e.target.value)}
+                >
+                  <option value="">Choose Site...</option>
+                  {locations.filter(l => l.branch_id === selectedBranchId).map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">From</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold"
+                    value={auditStartDate}
+                    onChange={e => setAuditStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">To</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold"
+                    value={auditEndDate}
+                    onChange={e => setAuditEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <button 
+                onClick={runLocationAudit}
+                disabled={auditLoading || !auditLocationId}
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {auditLoading ? <Loader2 className="animate-spin" size={16} /> : <TrendingUp size={16} />}
+                CALCULATE SITE COST
+              </button>
+
+              {auditResult !== null && (
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in slide-in-from-top duration-300">
+                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Site Liability</p>
+                  <p className="text-2xl font-black text-emerald-900">R {formatCurrency(auditResult)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100">
               <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2"><MapPin size={18} className="text-rose-500" /> Distribution</h4>

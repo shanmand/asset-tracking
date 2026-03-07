@@ -4,6 +4,7 @@ import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, M
 import { Package, Truck, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle, User } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import BatchFinancialDetailCard from './BatchFinancialDetailCard';
 
 const BatchTracker: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
@@ -218,20 +219,10 @@ const BatchTracker: React.FC = () => {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-emerald-900 text-white rounded-xl p-6 shadow-xl relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-4 opacity-10"><Zap size={100} /></div>
-               <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-400 mb-4">Fee Analysis</h3>
-               <div className="space-y-4 relative z-10">
-                 <div className="flex justify-between border-b border-emerald-800 pb-2"><span className="text-emerald-100 text-xs">Asset</span><span className="font-bold">{asset?.name || 'Unknown'}</span></div>
-                 <div className="flex justify-between border-b border-emerald-800 pb-2"><span className="text-emerald-100 text-xs">Rate</span><span className="font-bold">R {applicableFee?.amount_zar.toFixed(2) || '0.00'}</span></div>
-                 <div className="flex justify-between items-end">
-                   <div>
-                      <p className="text-[10px] text-emerald-400 font-bold uppercase">Total Accrued</p>
-                      <p className="text-2xl font-bold">R {formatCurrency(currentBatch.quantity * (applicableFee?.amount_zar || 0))}</p>
-                   </div>
-                 </div>
-               </div>
-            </div>
+            <BatchFinancialDetailCard 
+              batchId={selectedBatchId} 
+              onUpdate={fetchData} 
+            />
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
