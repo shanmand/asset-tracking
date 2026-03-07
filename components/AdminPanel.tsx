@@ -27,11 +27,12 @@ import {
 import { UserRole, FeeType } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
+import DatabaseCleanup from './DatabaseCleanup';
 
 const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const { profile, user, refreshProfile } = useUser();
   const isAdmin = currentRole === UserRole.ADMIN;
-  const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance'>('fees');
+  const [activeSubTab, setActiveSubTab] = useState<'fees' | 'users' | 'maintenance' | 'cleanup'>('fees');
 
   const handleBootstrapAdmin = async () => {
     if (!user) {
@@ -323,7 +324,12 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
   const [newUser, setNewUser] = useState({ id: '', name: '', email: '', role: UserRole.STAFF, branch_id: 'LOC-JHB-01' });
 
   const generateUUID = () => {
-    return crypto.randomUUID();
+    // Manual UUID v4 generator to avoid environment-specific crypto issues
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   };
 
   const handleOpenAddUser = () => {
@@ -451,6 +457,12 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeSubTab === 'maintenance' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
         >
           <Zap size={14} /> System Maintenance
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('cleanup')}
+          className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeSubTab === 'cleanup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <Database size={14} /> Database Cleanup
         </button>
       </div>
 
@@ -749,6 +761,8 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
             </div>
           </div>
         </div>
+      ) : activeSubTab === 'cleanup' ? (
+        <DatabaseCleanup />
       ) : (
         renderMaintenance()
       )}

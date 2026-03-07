@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
-import { Package, Truck, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle, User } from 'lucide-react';
+import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle, User as UserIcon } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
@@ -196,8 +196,8 @@ const BatchTracker: React.FC = () => {
                           <h4 className="font-bold text-slate-800 text-lg mt-1">{trace.from_location_name} &rarr; {trace.to_location_name}</h4>
                           <div className="flex gap-2 mt-2">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${trace.condition === 'Clean' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{trace.condition}</span>
-                            {trace.truck_plate && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><Truck size={10} /> {trace.truck_plate}</span>}
-                            {trace.driver_name && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><User size={10} /> {trace.driver_name}</span>}
+                            {trace.truck_plate && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><TruckIcon size={10} /> {trace.truck_plate}</span>}
+                            {trace.driver_name && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><UserIcon size={10} /> {trace.driver_name}</span>}
                           </div>
                         </div>
                       </div>

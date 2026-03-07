@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Truck, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
+import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
 import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -358,7 +358,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                 <>
                   <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Truck size={14} /> Select Truck</h4>
+                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
                       <select 
                         className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
                         value={truckId}
@@ -369,7 +369,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><User size={14} /> Select Driver</h4>
+                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
                       <select 
                         className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
                         value={driverId}
@@ -468,7 +468,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <h3 className="font-bold text-slate-800 text-xs uppercase tracking-widest mb-4">Unit Summary</h3>
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg"><Truck size={24} /></div>
+              <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg"><TruckIcon size={24} /></div>
               <div>
                 <p className="text-lg font-bold text-slate-800 leading-none mb-1">{selectedTruck?.plate_number || 'Unassigned'}</p>
                 <p className="text-xs text-slate-500">{selectedDriver?.full_name || 'No Driver'}</p>
