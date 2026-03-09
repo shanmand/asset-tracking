@@ -265,6 +265,10 @@ export interface Task {
   priority: 'Low' | 'Medium' | 'High';
   due_date: string;
   assigned_to?: string;
+  location_id?: string;
+  created_by?: string;
+  task_type?: 'General' | 'Stock Take';
+  branch_name?: string;
   created_at: string;
 }
 

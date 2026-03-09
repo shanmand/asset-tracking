@@ -21,12 +21,17 @@ import { supabase, isSupabaseConfigured } from '../supabase';
 import { Task, User } from '../types';
 import { useUser } from '../UserContext';
 
-const TaskManagement: React.FC = () => {
+interface TaskManagementProps {
+  onStartStockTake?: (locationId: string) => void;
+}
+
+const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => {
   const { profile } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   
@@ -42,7 +47,10 @@ const TaskManagement: React.FC = () => {
     status: 'Pending' as const,
     priority: 'Medium' as const,
     due_date: new Date().toISOString().split('T')[0],
-    assigned_to: ''
+    assigned_to: '',
+    branch_name: 'Kya Sands',
+    task_type: 'General' as 'General' | 'Stock Take',
+    location_id: ''
   });
 
   const fetchData = async () => {
@@ -52,12 +60,14 @@ const TaskManagement: React.FC = () => {
     }
     setIsLoading(true);
     try {
-      const [tasksRes, usersRes] = await Promise.all([
-        supabase.from('tasks').select('*'),
-        supabase.from('users').select('*')
+      const [tasksRes, usersRes, locsRes] = await Promise.all([
+        supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+        supabase.from('users').select('*'),
+        supabase.from('locations').select('*').order('name')
       ]);
 
       if (tasksRes.data) setTasks(tasksRes.data);
+      if (locsRes.data) setLocations(locsRes.data);
       if (usersRes.data) {
         setUsers(usersRes.data.map((u: any) => ({
           id: u.id,
@@ -81,27 +91,58 @@ const TaskManagement: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      let finalDescription = newTask.description;
+
+      // Auto-generate batch list for Stock Take tasks
+      if (newTask.task_type === 'Stock Take' && newTask.location_id) {
+        const { data: batches } = await supabase
+          .from('batches')
+          .select('id, quantity')
+          .eq('current_location_id', newTask.location_id)
+          .eq('status', 'Success');
+        
+        if (batches && batches.length > 0) {
+          const batchList = batches.map(b => `- Batch #${b.id}: ${b.quantity} units`).join('\n');
+          finalDescription = `${newTask.description}\n\nExpected Inventory:\n${batchList}`;
+        } else {
+          finalDescription = `${newTask.description}\n\n(No active batches found at this location)`;
+        }
+      }
+
       const { data, error } = await supabase
         .from('tasks')
         .insert([{
-          ...newTask,
-          assigned_to: newTask.assigned_to || null
+          title: newTask.title,
+          description: finalDescription,
+          status: newTask.status,
+          priority: newTask.priority,
+          due_date: newTask.due_date,
+          assigned_to: newTask.assigned_to || null,
+          branch_name: newTask.branch_name,
+          task_type: newTask.task_type,
+          location_id: newTask.location_id || null
         }])
         .select();
 
       if (error) throw error;
-      if (data) setTasks(prev => [...prev, data[0]]);
-      setIsAdding(false);
-      setNewTask({
-        title: '',
-        description: '',
-        status: 'Pending',
-        priority: 'Medium',
-        due_date: new Date().toISOString().split('T')[0],
-        assigned_to: ''
-      });
+      if (data) {
+        setTasks(prev => [data[0], ...prev]);
+        setIsTaskModalOpen(false);
+        setNewTask({
+          title: '',
+          description: '',
+          status: 'Pending',
+          priority: 'Medium',
+          due_date: new Date().toISOString().split('T')[0],
+          assigned_to: '',
+          branch_name: 'Kya Sands',
+          task_type: 'General',
+          location_id: ''
+        });
+      }
     } catch (err) {
       console.error("Create Task Error:", err);
+      alert("Failed to create task. Check console for details.");
     } finally {
       setIsLoading(false);
     }
@@ -178,7 +219,7 @@ const TaskManagement: React.FC = () => {
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Operational To-Dos & Deadlines</p>
         </div>
         <button 
-          onClick={() => setIsAdding(true)}
+          onClick={() => setIsTaskModalOpen(true)}
           className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
         >
           <Plus size={18} /> CREATE NEW TASK
@@ -253,13 +294,23 @@ const TaskManagement: React.FC = () => {
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200">
-                  {users.find(u => u.id === task.assigned_to)?.name.charAt(0) || <UserIcon size={12} />}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200">
+                    {users.find(u => u.id === task.assigned_to)?.name.charAt(0) || <UserIcon size={12} />}
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">
+                    {users.find(u => u.id === task.assigned_to)?.name || 'Unassigned'}
+                  </span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  {users.find(u => u.id === task.assigned_to)?.name || 'Unassigned'}
-                </span>
+                {task.task_type === 'Stock Take' && task.location_id && task.status !== 'Completed' && (
+                  <button 
+                    onClick={() => onStartStockTake?.(task.location_id!)}
+                    className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:underline flex items-center gap-1"
+                  >
+                    Start Task &rarr;
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -267,24 +318,24 @@ const TaskManagement: React.FC = () => {
       </div>
 
       {/* Modals */}
-      {(isAdding || isEditing) && (
+      {(isTaskModalOpen || isEditing) && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center">
               <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">
-                {isAdding ? 'Create New Task' : 'Edit Task'}
+                {isTaskModalOpen ? 'Create New Task' : 'Edit Task'}
               </h4>
-              <button onClick={() => { setIsAdding(false); setIsEditing(false); }} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+              <button onClick={() => { setIsTaskModalOpen(false); setIsEditing(false); }} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
             </div>
             
-            <form onSubmit={isAdding ? handleCreateTask : handleUpdateTask} className="p-8 space-y-6">
+            <form onSubmit={isTaskModalOpen ? handleCreateTask : handleUpdateTask} className="p-8 space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Task Title</label>
                 <input 
                   required
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                  value={isAdding ? newTask.title : editingTask?.title}
-                  onChange={e => isAdding ? setNewTask({...newTask, title: e.target.value}) : setEditingTask({...editingTask!, title: e.target.value})}
+                  value={isTaskModalOpen ? newTask.title : editingTask?.title}
+                  onChange={e => isTaskModalOpen ? setNewTask({...newTask, title: e.target.value}) : setEditingTask({...editingTask!, title: e.target.value})}
                 />
               </div>
               
@@ -293,43 +344,59 @@ const TaskManagement: React.FC = () => {
                 <textarea 
                   rows={3}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                  value={isAdding ? newTask.description : editingTask?.description}
-                  onChange={e => isAdding ? setNewTask({...newTask, description: e.target.value}) : setEditingTask({...editingTask!, description: e.target.value})}
+                  value={isTaskModalOpen ? newTask.description : editingTask?.description}
+                  onChange={e => isTaskModalOpen ? setNewTask({...newTask, description: e.target.value}) : setEditingTask({...editingTask!, description: e.target.value})}
                 />
               </div>
               
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Task Type</label>
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                    value={isTaskModalOpen ? newTask.task_type : (editingTask as any)?.task_type}
+                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, task_type: e.target.value as any}) : setEditingTask({...editingTask!, task_type: e.target.value as any} as any)}
+                  >
+                    <option value="General">General</option>
+                    <option value="Stock Take">Stock Take</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Priority</label>
                   <select 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                    value={isAdding ? newTask.priority : editingTask?.priority}
-                    onChange={e => isAdding ? setNewTask({...newTask, priority: e.target.value as any}) : setEditingTask({...editingTask!, priority: e.target.value as any})}
+                    value={isTaskModalOpen ? newTask.priority : editingTask?.priority}
+                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, priority: e.target.value as any}) : setEditingTask({...editingTask!, priority: e.target.value as any})}
                   >
                     <option value="Low">Low</option>
                     <option value="Medium">Medium</option>
                     <option value="High">High</option>
                   </select>
                 </div>
+              </div>
+
+              {((isTaskModalOpen && newTask.task_type === 'Stock Take') || (!isTaskModalOpen && editingTask?.task_type === 'Stock Take')) && (
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Due Date</label>
-                  <input 
-                    type="date"
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Target Location</label>
+                  <select 
                     required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                    value={isAdding ? newTask.due_date : editingTask?.due_date}
-                    onChange={e => isAdding ? setNewTask({...newTask, due_date: e.target.value}) : setEditingTask({...editingTask!, due_date: e.target.value})}
-                  />
+                    value={isTaskModalOpen ? newTask.location_id : editingTask?.location_id}
+                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, location_id: e.target.value}) : setEditingTask({...editingTask!, location_id: e.target.value})}
+                  >
+                    <option value="">Select Location...</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
                 </div>
-              </div>
+              )}
               
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</label>
                   <select 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                    value={isAdding ? newTask.status : editingTask?.status}
-                    onChange={e => isAdding ? setNewTask({...newTask, status: e.target.value as any}) : setEditingTask({...editingTask!, status: e.target.value as any})}
+                    value={isTaskModalOpen ? newTask.status : editingTask?.status}
+                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, status: e.target.value as any}) : setEditingTask({...editingTask!, status: e.target.value as any})}
                   >
                     <option value="Pending">Pending</option>
                     <option value="In Progress">In Progress</option>
@@ -340,20 +407,32 @@ const TaskManagement: React.FC = () => {
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Assignee</label>
                   <select 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                    value={isAdding ? newTask.assigned_to : editingTask?.assigned_to}
-                    onChange={e => isAdding ? setNewTask({...newTask, assigned_to: e.target.value}) : setEditingTask({...editingTask!, assigned_to: e.target.value})}
+                    value={isTaskModalOpen ? newTask.assigned_to : editingTask?.assigned_to}
+                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, assigned_to: e.target.value}) : setEditingTask({...editingTask!, assigned_to: e.target.value})}
                   >
                     <option value="">Unassigned</option>
                     {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={isTaskModalOpen ? newTask.branch_name : (editingTask as any)?.branch_name}
+                  onChange={e => isTaskModalOpen ? setNewTask({...newTask, branch_name: e.target.value}) : setEditingTask({...editingTask!, branch_name: e.target.value} as any)}
+                >
+                  <option value="Kya Sands">Kya Sands</option>
+                  <option value="Durban">Durban</option>
+                </select>
+              </div>
               
               <button 
                 type="submit"
                 className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 mt-4"
               >
-                {isAdding ? 'CREATE TASK' : 'SAVE CHANGES'}
+                {isTaskModalOpen ? 'CREATE TASK' : 'SAVE CHANGES'}
               </button>
             </form>
           </div>

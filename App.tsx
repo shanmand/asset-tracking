@@ -87,6 +87,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
   const [dbBranches, setDbBranches] = useState<Branch[]>([]);
+  const [preselectedStockTakeLocation, setPreselectedStockTakeLocation] = useState<string | undefined>(undefined);
 
   React.useEffect(() => {
     const fetchBranches = async () => {
@@ -132,8 +133,8 @@ const AppContent: React.FC = () => {
       case NavItem.LOGISTICS_REGISTRY: return <LogisticsRegistry />;
       case NavItem.BATCH_MANAGEMENT: return <BatchManagement />;
       case NavItem.REPORTS: return <ReportsView />;
-      case NavItem.TASKS: return <TaskManagement />;
-      case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.TASKS: return <TaskManagement onStartStockTake={(locId) => { setPreselectedStockTakeLocation(locId); setActiveTab(NavItem.STOCK_TAKE); }} />;
+      case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialLocationId={preselectedStockTakeLocation} />;
       case NavItem.FINANCE_SETTLEMENT: return <SettlementModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.LIABILITY_HEATMAP: return <LiabilityHeatmap />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;

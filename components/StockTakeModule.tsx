@@ -6,13 +6,14 @@ import { Batch, Location, AssetMaster, User } from '../types';
 
 interface StockTakeModuleProps {
   currentUser: User;
+  initialLocationId?: string;
 }
 
-const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
+const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialLocationId }) => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [selectedLocation, setSelectedLocation] = useState<string>(initialLocationId || '');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notes, setNotes] = useState('');
