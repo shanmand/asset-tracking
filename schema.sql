@@ -208,7 +208,7 @@ CREATE TABLE public.tasks (
     priority TEXT DEFAULT 'Medium', -- Low, Medium, High
     due_date DATE,
     assigned_to UUID REFERENCES public.users(id),
-    branch_name TEXT, -- Kya Sands, Durban
+    branch_id TEXT REFERENCES public.branches(id),
     location_id UUID REFERENCES public.locations(id),
     created_by UUID REFERENCES public.users(id) DEFAULT auth.uid(),
     task_type TEXT DEFAULT 'General', -- General, Stock Take

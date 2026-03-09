@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardCheck, AlertTriangle, Search, MapPin, Package, History, TrendingDown, Loader2, CheckCircle2, Plus } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import BranchSelector from './BranchSelector';
 import { Batch, Location, AssetMaster, User } from '../types';
 
 interface StockTakeModuleProps {
@@ -13,6 +14,7 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialL
   const [locations, setLocations] = useState<Location[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>(initialLocationId || '');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -139,6 +141,14 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialL
           </div>
           <div className="flex items-center gap-4">
             <div className="relative">
+              <BranchSelector 
+                value={selectedBranch}
+                onChange={setSelectedBranch}
+                placeholder="All Branches"
+                className="bg-slate-800 border-slate-700 text-white text-xs py-2 h-auto"
+              />
+            </div>
+            <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <select 
                 className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-white"
@@ -146,7 +156,10 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialL
                 onChange={e => setSelectedLocation(e.target.value)}
               >
                 <option value="">Select Location...</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                {locations
+                  .filter(l => !selectedBranch || l.branch_id === selectedBranch)
+                  .map(l => <option key={l.id} value={l.id}>{l.name}</option>)
+                }
               </select>
             </div>
           </div>

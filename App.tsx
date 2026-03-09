@@ -54,6 +54,7 @@ import TaskManagement from './components/TaskManagement';
 import StockTakeModule from './components/StockTakeModule';
 import SettlementModule from './components/SettlementModule';
 import LiabilityHeatmap from './components/LiabilityHeatmap';
+import { useBranches } from './useBranches';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
 
@@ -83,25 +84,17 @@ enum NavItem {
 }
 
 const AppContent: React.FC = () => {
-  const { user, profile, isLoading, logout, hasPermission } = useUser();
+  const { user, profile, isLoading: isUserLoading, logout, hasPermission } = useUser();
+  const { branches: dbBranches, isLoading: isBranchesLoading } = useBranches();
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
-  const [dbBranches, setDbBranches] = useState<Branch[]>([]);
   const [preselectedStockTakeLocation, setPreselectedStockTakeLocation] = useState<string | undefined>(undefined);
-
-  React.useEffect(() => {
-    const fetchBranches = async () => {
-      const { data } = await supabase.from('branches').select('*');
-      if (data) setDbBranches(data);
-    };
-    fetchBranches();
-  }, []);
 
   const currentBranchContext = profile?.role_name === UserRole.MANAGER 
     ? (profile.home_branch_name.includes('JHB') ? 'Kya Sands' : 'Durban') 
     : selectedBranchFilter;
 
-  if (isLoading) {
+  if (isUserLoading || isBranchesLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center space-y-4">

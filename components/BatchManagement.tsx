@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Database, ArrowDownToLine } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import BranchSelector from './BranchSelector';
 import { Batch, AssetMaster, Location, LocationType } from '../types';
 
 const BatchManagement: React.FC = () => {
@@ -12,6 +13,7 @@ const BatchManagement: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
 
   const [newBatch, setNewBatch] = useState({
     id: '',
@@ -179,6 +181,14 @@ const BatchManagement: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Filter</label>
+              <BranchSelector 
+                value={selectedBranch}
+                onChange={setSelectedBranch}
+                placeholder="All Branches"
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Initial Location</label>
               <select 
                 required
@@ -187,7 +197,10 @@ const BatchManagement: React.FC = () => {
                 onChange={e => setNewBatch({...newBatch, current_location_id: e.target.value})}
               >
                 <option value="">Select Location</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)}
+                {locations
+                  .filter(l => !selectedBranch || l.branch_id === selectedBranch)
+                  .map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)
+                }
               </select>
               {locations.length === 0 && (
                 <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No locations found. Add a location in the Admin Panel first.</p>

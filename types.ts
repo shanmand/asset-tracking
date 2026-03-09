@@ -268,7 +268,7 @@ export interface Task {
   location_id?: string;
   created_by?: string;
   task_type?: 'General' | 'Stock Take';
-  branch_name?: string;
+  branch_id?: string;
   created_at: string;
 }
 

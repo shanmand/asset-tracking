@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import BranchSelector from './BranchSelector';
 import { Task, User } from '../types';
 import { useUser } from '../UserContext';
 
@@ -48,7 +49,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
     priority: 'Medium' as const,
     due_date: new Date().toISOString().split('T')[0],
     assigned_to: '',
-    branch_name: 'Kya Sands',
+    branch_id: '',
     task_type: 'General' as 'General' | 'Stock Take',
     location_id: ''
   });
@@ -118,7 +119,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
           priority: newTask.priority,
           due_date: newTask.due_date,
           assigned_to: newTask.assigned_to || null,
-          branch_name: newTask.branch_name,
+          branch_id: newTask.branch_id || null,
           task_type: newTask.task_type,
           location_id: newTask.location_id || null
         }])
@@ -135,7 +136,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
           priority: 'Medium',
           due_date: new Date().toISOString().split('T')[0],
           assigned_to: '',
-          branch_name: 'Kya Sands',
+          branch_id: '',
           task_type: 'General',
           location_id: ''
         });
@@ -418,14 +419,11 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch</label>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                  value={isTaskModalOpen ? newTask.branch_name : (editingTask as any)?.branch_name}
-                  onChange={e => isTaskModalOpen ? setNewTask({...newTask, branch_name: e.target.value}) : setEditingTask({...editingTask!, branch_name: e.target.value} as any)}
-                >
-                  <option value="Kya Sands">Kya Sands</option>
-                  <option value="Durban">Durban</option>
-                </select>
+                <BranchSelector 
+                  value={isTaskModalOpen ? newTask.branch_id : (editingTask as any)?.branch_id}
+                  onChange={val => isTaskModalOpen ? setNewTask({...newTask, branch_id: val}) : setEditingTask({...editingTask!, branch_id: val} as any)}
+                  placeholder="Select Branch..."
+                />
               </div>
               
               <button 
