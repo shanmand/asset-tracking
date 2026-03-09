@@ -4,7 +4,7 @@ import {
   Package, 
   MapPin, 
   Truck, 
-  History, 
+  History as HistoryIcon, 
   Search,
   ChevronRight,
   TrendingUp,
@@ -153,7 +153,7 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.DASHBOARD} onClick={() => setActiveTab(NavItem.DASHBOARD)} icon={<LayoutDashboard size={18} />} label="Dashboard" />
           <SidebarButton active={activeTab === NavItem.REPORTS} onClick={() => setActiveTab(NavItem.REPORTS)} icon={<BarChart3 size={18} />} label="Logistics Intelligence" />
           <SidebarButton active={activeTab === NavItem.INVENTORY} onClick={() => setActiveTab(NavItem.INVENTORY)} icon={<Globe size={18} />} label="Inventory Map" />
-          <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<History size={18} />} label="Batch Forensic" />
+          <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<HistoryIcon size={18} />} label="Batch Forensic" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Operations</div>
           <SidebarButton active={activeTab === NavItem.BATCH_MANAGEMENT} onClick={() => setActiveTab(NavItem.BATCH_MANAGEMENT)} icon={<ArrowDownToLine size={18} />} label="Inventory Intake" />

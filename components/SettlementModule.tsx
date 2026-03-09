@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Location, Batch, AssetMaster, FeeSchedule, User, UserRole, Settlement } from '../types';
-import { Receipt, DollarSign, Calendar, MapPin, Calculator, Loader2, CheckCircle2, AlertTriangle, TrendingUp, Info, Download, Trash2 } from 'lucide-react';
+import { Receipt, DollarSign, Calendar, MapPin, Calculator, Loader2, CheckCircle2, AlertTriangle, TrendingUp, Info, Download, Trash2, History as HistoryIcon } from 'lucide-react';
 
 interface SettlementModuleProps {
   currentUser: User;
@@ -318,7 +318,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
               <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                <History size={14} className="text-blue-500" /> Recent Settlements
+                <HistoryIcon size={14} className="text-blue-500" /> Recent Settlements
               </h4>
             </div>
             <div className="p-6 space-y-4 max-h-[600px] overflow-y-auto">

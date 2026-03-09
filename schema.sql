@@ -428,16 +428,61 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION get_supplier_liability(p_supplier_id TEXT, p_start_date DATE, p_end_date DATE)
-RETURNS TABLE (total_rental_accrued NUMERIC, total_replacement_fees NUMERIC, total_credits NUMERIC, gross_liability NUMERIC) AS $$
-DECLARE
-    v_rental NUMERIC := 0;
-    v_losses NUMERIC := 0;
-    v_credits NUMERIC := 0;
+RETURNS TABLE (
+    batch_id TEXT,
+    asset_name TEXT,
+    days INTEGER,
+    amount_zar NUMERIC,
+    liability_type TEXT
+) AS $$
 BEGIN
-    SELECT COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) INTO v_rental FROM public.batches b JOIN public.asset_master a ON b.asset_id = a.id WHERE a.supplier_id = p_supplier_id AND b.is_settled = FALSE AND b.transaction_date <= p_end_date;
-    SELECT COALESCE(SUM(al.lost_quantity * fs.amount_zar), 0) INTO v_losses FROM public.asset_losses al JOIN public.batches b ON al.batch_id = b.id JOIN public.asset_master a ON b.asset_id = a.id JOIN public.fee_schedule fs ON a.id = fs.asset_id WHERE a.supplier_id = p_supplier_id AND al.is_settled = FALSE AND al.transaction_date <= p_end_date AND fs.fee_type = 'Replacement Fee (Lost Equipment)' AND fs.effective_to IS NULL;
-    SELECT COALESCE(SUM(c.amount_claimed_zar), 0) INTO v_credits FROM public.claims c JOIN public.batches b ON c.batch_id = b.id JOIN public.asset_master a ON b.asset_id = a.id WHERE a.supplier_id = p_supplier_id AND c.status = 'Accepted' AND c.type = 'Damaged' AND c.created_at::date <= p_end_date;
-    RETURN QUERY SELECT v_rental, v_losses, v_credits, (v_rental + v_losses - v_credits);
+    -- Rental Accruals
+    RETURN QUERY
+    SELECT 
+        b.id,
+        a.name,
+        GREATEST(0, (CASE WHEN b.transfer_confirmed_by_customer THEN b.confirmation_date ELSE CURRENT_DATE END - b.transaction_date))::INTEGER,
+        public.calculate_batch_accrual(b.id),
+        'Rental'::TEXT
+    FROM public.batches b
+    JOIN public.asset_master a ON b.asset_id = a.id
+    WHERE a.supplier_id = p_supplier_id 
+      AND b.is_settled = FALSE 
+      AND b.transaction_date <= p_end_date;
+
+    -- Losses
+    RETURN QUERY
+    SELECT 
+        al.batch_id,
+        a.name,
+        0, -- Days not applicable for loss
+        al.lost_quantity * fs.amount_zar,
+        'Loss'::TEXT
+    FROM public.asset_losses al
+    JOIN public.batches b ON al.batch_id = b.id
+    JOIN public.asset_master a ON b.asset_id = a.id
+    JOIN public.fee_schedule fs ON a.id = fs.asset_id
+    WHERE a.supplier_id = p_supplier_id 
+      AND al.is_settled = FALSE 
+      AND al.transaction_date <= p_end_date 
+      AND fs.fee_type = 'Replacement Fee (Lost Equipment)' 
+      AND fs.effective_to IS NULL;
+
+    -- Credits
+    RETURN QUERY
+    SELECT 
+        c.batch_id,
+        a.name,
+        0,
+        -c.amount_claimed_zar,
+        'Credit'::TEXT
+    FROM public.claims c
+    JOIN public.batches b ON c.batch_id = b.id
+    JOIN public.asset_master a ON b.asset_id = a.id
+    WHERE a.supplier_id = p_supplier_id 
+      AND c.status = 'Accepted' 
+      AND c.type = 'Damaged' 
+      AND c.created_at::date <= p_end_date;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

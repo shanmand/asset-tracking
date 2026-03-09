@@ -14,6 +14,7 @@ import {
   Flame
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { Branch } from '../types';
 
 interface DailyBurnRecord {
   branch_name: string;
@@ -27,8 +28,9 @@ interface DailyBurnRecord {
 
 const LiabilityHeatmap: React.FC = () => {
   const [data, setData] = useState<DailyBurnRecord[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<'Global' | 'Kya Sands' | 'Durban'>('Global');
+  const [filter, setFilter] = useState<string>('Global');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,13 +40,22 @@ const LiabilityHeatmap: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const { data: burnData, error } = await supabase
-          .from('vw_daily_burn_rate')
-          .select('*')
-          .order('daily_burn_rate', { ascending: false });
+        const [burnRes, branchesRes] = await Promise.all([
+          supabase
+            .from('vw_daily_burn_rate')
+            .select('*')
+            .order('daily_burn_rate', { ascending: false }),
+          supabase
+            .from('branches')
+            .select('*')
+            .order('name')
+        ]);
 
-        if (error) throw error;
-        setData(burnData || []);
+        if (burnRes.error) throw burnRes.error;
+        if (branchesRes.error) throw branchesRes.error;
+
+        setData(burnRes.data || []);
+        setBranches(branchesRes.data || []);
       } catch (err) {
         console.error("Heatmap Fetch Error:", err);
       } finally {
@@ -108,12 +119,12 @@ const LiabilityHeatmap: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-xl">
-          {(['Global', 'Kya Sands', 'Durban'] as const).map(f => (
+        <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
+          {['Global', ...branches.map(b => b.name)].map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
                 filter === f ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500 hover:text-slate-700'
               }`}
             >

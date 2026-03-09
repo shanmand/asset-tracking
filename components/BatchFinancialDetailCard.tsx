@@ -162,9 +162,9 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
 
   if (!batch) return null;
 
-  const isInternal = batch.asset.ownership_type === 'Internal';
+  const isInternal = batch.asset?.ownership_type === 'Internal';
   const isConfirmed = batch.transfer_confirmed_by_customer;
-  const isRental = batch.asset.billing_model === 'Daily Rental (Supermarket)';
+  const isRental = batch.asset?.billing_model === 'Daily Rental (Supermarket)';
 
   const getStatus = () => {
     if (isInternal) return { label: 'Non-Billable', color: 'bg-slate-100 text-slate-500', icon: <ShieldCheck size={12} /> };
@@ -178,7 +178,11 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
   const endDate = isConfirmed ? new Date(batch.confirmation_date!) : new Date();
   const durationDays = Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatCurrency = (val: number | string | undefined | null) => {
+    const num = Number(val);
+    if (isNaN(num)) return '0.00';
+    return num.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden group transition-all hover:border-slate-300">
@@ -214,7 +218,7 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
               <Building2 size={14} />
               <span className="text-xs font-bold uppercase tracking-widest">Custodian Branch</span>
             </div>
-            <p className="text-sm font-black text-slate-900 uppercase">{batch.location.branch.name}</p>
+            <p className="text-sm font-black text-slate-900 uppercase">{batch.location?.branch?.name || 'Unknown Branch'}</p>
           </div>
         </div>
 

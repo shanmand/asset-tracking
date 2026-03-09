@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
-import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History, Camera, UploadCloud, XCircle, User as UserIcon } from 'lucide-react';
+import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
@@ -179,7 +179,7 @@ const BatchTracker: React.FC = () => {
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-8 flex items-center gap-2">
-                <History size={20} className="text-emerald-500" />
+                <HistoryIcon size={20} className="text-emerald-500" />
                 Movement History
               </h3>
 

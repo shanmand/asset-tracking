@@ -15,24 +15,29 @@ import {
   FileText
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Location, User } from '../types';
+import { Location, User, BusinessParty } from '../types';
 
 interface PaymentSettlementProps {
   currentUser?: User;
 }
 
+const isValidUuid = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+
+interface LiabilityRecord {
+  batch_id: string;
+  asset_name: string;
+  days: number;
+  amount_zar: number;
+  liability_type: 'Rental' | 'Loss' | 'Credit';
+}
+
 const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) => {
-  const [suppliers, setSuppliers] = useState<Location[]>([]);
+  const [suppliers, setSuppliers] = useState<BusinessParty[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
-  const [liability, setLiability] = useState<{
-    total_rental_accrued: number;
-    total_replacement_fees: number;
-    total_credits: number;
-    gross_liability: number;
-  } | null>(null);
+  const [records, setRecords] = useState<LiabilityRecord[]>([]);
 
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [cashPaid, setCashPaid] = useState<number>(0);
@@ -50,9 +55,9 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
         return;
       }
       const { data } = await supabase
-        .from('locations')
+        .from('business_parties')
         .select('*')
-        .eq('partner_type', 'Supplier');
+        .eq('party_type', 'Supplier');
       if (data) setSuppliers(data);
       setIsLoading(false);
     };
@@ -60,7 +65,14 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
   }, []);
 
   const calculateLiability = async () => {
-    if (!selectedSupplier || !isSupabaseConfigured) return;
+    if (!selectedSupplier) return;
+    
+    if (!isValidUuid(selectedSupplier)) {
+      alert('Please select a valid supplier');
+      return;
+    }
+
+    if (!isSupabaseConfigured) return;
     setIsCalculating(true);
     try {
       const { data, error } = await supabase.rpc('get_supplier_liability', {
@@ -70,10 +82,10 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
       });
 
       if (error) throw error;
-      if (data && data.length > 0) {
-        setLiability(data[0]);
-        setCashPaid(data[0].gross_liability);
-      }
+      setRecords(data || []);
+      
+      const gross = (data || []).reduce((acc: number, r: LiabilityRecord) => acc + Number(r.amount_zar), 0);
+      setCashPaid(gross);
     } catch (err: any) {
       setNotification({ message: err.message || "Failed to calculate liability", type: 'error' });
     } finally {
@@ -81,10 +93,11 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
     }
   };
 
-  const netPayable = (liability?.gross_liability || 0) - discountAmount;
+  const grossLiability = records.reduce((acc, r) => acc + Number(r.amount_zar), 0);
+  const netPayable = grossLiability - discountAmount;
 
   const handleProcessPayment = async () => {
-    if (!selectedSupplier || !liability || !isSupabaseConfigured || isSubmitting) return;
+    if (!selectedSupplier || records.length === 0 || !isSupabaseConfigured || isSubmitting) return;
     
     setIsSubmitting(true);
     try {
@@ -92,7 +105,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
         p_supplier_id: selectedSupplier,
         p_start_date: startDate,
         p_end_date: endDate,
-        p_gross_liability: liability.gross_liability,
+        p_gross_liability: grossLiability,
         p_discount_amount: discountAmount,
         p_net_payable: netPayable,
         p_cash_paid: cashPaid,
@@ -103,7 +116,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
       if (error) throw error;
 
       setNotification({ message: `Payment processed successfully. Settlement ID: ${data}`, type: 'success' });
-      setLiability(null);
+      setRecords([]);
       setDiscountAmount(0);
       setCashPaid(0);
       setPaymentRef('');
@@ -116,18 +129,17 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
   };
 
   const exportToCSV = () => {
-    if (!liability) return;
+    if (records.length === 0) return;
     
     const supplier = suppliers.find(s => s.id === selectedSupplier)?.name || 'Unknown';
     const rows = [
       ['Supplier', supplier],
       ['Period', `${startDate} to ${endDate}`],
       ['', ''],
-      ['Description', 'Amount (ZAR)'],
-      ['Total Rental Accrued', liability.total_rental_accrued.toFixed(2)],
-      ['Total Replacement Fees', liability.total_replacement_fees.toFixed(2)],
-      ['Total Credits (Damaged)', `-${liability.total_credits.toFixed(2)}`],
-      ['Gross Liability', liability.gross_liability.toFixed(2)],
+      ['Batch ID', 'Asset', 'Days', 'Type', 'Amount (ZAR)'],
+      ...records.map(r => [r.batch_id, r.asset_name, r.days, r.liability_type, r.amount_zar]),
+      ['', ''],
+      ['Gross Liability', grossLiability.toFixed(2)],
       ['Discount Applied', `-${discountAmount.toFixed(2)}`],
       ['Net Payable', netPayable.toFixed(2)],
       ['Cash Paid', cashPaid.toFixed(2)],
@@ -223,42 +235,48 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
             </button>
           </div>
 
-          {liability && (
+          {records.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
-              {/* Liability Breakdown */}
+              {/* Liability Detailed Table */}
               <div className="lg:col-span-2 space-y-6">
-                <div className="bg-white rounded-2xl border border-slate-200 p-8 space-y-6">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-4">Liability Breakdown</h4>
-                  
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3 text-slate-600">
-                        <Calendar size={18} className="text-blue-500" />
-                        <span className="text-sm font-bold">Total Rental Accrued</span>
-                      </div>
-                      <span className="text-sm font-black text-slate-900">R {formatCurrency(liability.total_rental_accrued)}</span>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3 text-slate-600">
-                        <PlusCircle size={18} className="text-amber-500" />
-                        <span className="text-sm font-bold">Total Replacement Fees</span>
-                      </div>
-                      <span className="text-sm font-black text-slate-900">R {formatCurrency(liability.total_replacement_fees)}</span>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3 text-slate-600">
-                        <MinusCircle size={18} className="text-emerald-500" />
-                        <span className="text-sm font-bold">Total Credits (Damaged)</span>
-                      </div>
-                      <span className="text-sm font-black text-emerald-600">- R {formatCurrency(liability.total_credits)}</span>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                      <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Gross Liability</span>
-                      <span className="text-2xl font-black text-slate-900">R {formatCurrency(liability.gross_liability)}</span>
-                    </div>
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Calculation Details</h4>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{records.length} Records Found</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50">
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Days</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total ZAR</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {records.map((r, i) => (
+                          <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 text-xs font-bold text-slate-900">{r.batch_id}</td>
+                            <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.asset_name}</td>
+                            <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.days > 0 ? r.days : '-'}</td>
+                            <td className="px-6 py-4">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                                r.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
+                                r.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
+                                'bg-emerald-100 text-emerald-700'
+                              }`}>
+                                {r.liability_type}
+                              </span>
+                            </td>
+                            <td className={`px-6 py-4 text-xs font-black text-right ${Number(r.amount_zar) < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                              R {formatCurrency(Number(r.amount_zar))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
@@ -279,13 +297,20 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
               </div>
 
               {/* Payment Form */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-8 space-y-6 shadow-xl relative">
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 space-y-6 shadow-xl relative h-fit">
                 <div className="absolute top-0 right-0 p-4 opacity-5"><DollarSign size={80} /></div>
                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-4">Process Settlement</h4>
                 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Discount Amount (Negotiated)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gross Total</label>
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <p className="text-xl font-black text-slate-900">R {formatCurrency(grossLiability)}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Settlement Discount</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R</span>
                       <input 
