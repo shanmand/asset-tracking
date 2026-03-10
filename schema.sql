@@ -73,6 +73,19 @@ CREATE TABLE public.asset_master (
 CREATE TABLE public.trucks (
     id TEXT PRIMARY KEY,
     plate_number TEXT NOT NULL UNIQUE,
+    license_disc_expiry DATE,
+    branch_id TEXT REFERENCES public.branches(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.truck_roadworthy_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    truck_id TEXT REFERENCES public.trucks(id),
+    test_date DATE NOT NULL,
+    expiry_date DATE NOT NULL,
+    certificate_number TEXT,
+    result TEXT, -- Pass/Fail
+    notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -80,6 +93,20 @@ CREATE TABLE public.drivers (
     id TEXT PRIMARY KEY,
     full_name TEXT NOT NULL,
     contact_number TEXT,
+    license_number TEXT,
+    license_expiry DATE,
+    branch_id TEXT REFERENCES public.branches(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.driver_shifts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    driver_id TEXT REFERENCES public.drivers(id),
+    truck_id TEXT REFERENCES public.trucks(id),
+    start_time TIMESTAMPTZ DEFAULT NOW(),
+    end_time TIMESTAMPTZ,
+    branch_id TEXT REFERENCES public.branches(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -87,8 +114,9 @@ CREATE TABLE public.users (
     id UUID PRIMARY KEY,
     full_name TEXT,
     email TEXT UNIQUE,
-    role_name TEXT DEFAULT 'Crates Department',
-    home_branch_name TEXT DEFAULT 'Kya Sands',
+    role_name TEXT DEFAULT 'Operator', -- Admin, Manager, Operator
+    branch_id TEXT REFERENCES public.branches(id),
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -204,12 +232,12 @@ CREATE TABLE public.tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     description TEXT,
-    status TEXT DEFAULT 'Pending', -- Pending, In Progress, Completed
-    priority TEXT DEFAULT 'Medium', -- Low, Medium, High
-    due_date DATE,
-    assigned_to UUID REFERENCES public.users(id),
+    status TEXT DEFAULT 'Pending',
+    priority TEXT DEFAULT 'Medium',
+    due_date TIMESTAMPTZ,
+    assigned_to TEXT, -- Can be User UUID or Driver ID (Note: foreign key dropped to support polymorphic assignment)
     branch_id TEXT REFERENCES public.branches(id),
-    location_id UUID REFERENCES public.locations(id),
+    location_id TEXT REFERENCES public.locations(id),
     created_by UUID REFERENCES public.users(id) DEFAULT auth.uid(),
     task_type TEXT DEFAULT 'General', -- General, Stock Take
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -610,7 +638,25 @@ INSERT INTO public.asset_master (id, name, type, dimensions, material, supplier_
 ('SH-P01', 'Heavy Duty Flour Pallet', 'Pallet', '1200x1000mm', 'Reinforced Pine', 'LOC-SUP-01')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
+-- 16. Personnel View
+CREATE OR REPLACE VIEW public.vw_assignable_personnel AS
+SELECT 
+    id::text, 
+    full_name as name, 
+    role_name as role, 
+    'User' as type,
+    branch_id,
+    is_active
+FROM public.users
+UNION ALL
+SELECT 
+    id, 
+    full_name as name, 
+    'Driver' as role, 
+    'Driver' as type,
+    branch_id,
+    is_active
+FROM public.drivers;
 ('SH-001', 'Daily Rental (Supermarket)', 5.50, '2026-01-01'),
 ('SH-001', 'Replacement Fee (Lost Equipment)', 450.00, '2026-01-01'),
 ('SH-P01', 'Daily Rental (Supermarket)', 12.00, '2026-01-01'),

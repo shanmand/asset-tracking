@@ -126,6 +126,19 @@ export interface Truck {
   plate_number: string;
   model?: string;
   capacity?: number;
+  license_disc_expiry?: string;
+  branch_id?: string;
+  created_at?: string;
+}
+
+export interface TruckRoadworthyHistory {
+  id: string;
+  truck_id: string;
+  test_date: string;
+  expiry_date: string;
+  certificate_number?: string;
+  result?: string;
+  notes?: string;
   created_at?: string;
 }
 
@@ -133,8 +146,11 @@ export interface Driver {
   id: string;
   full_name: string;
   license_number?: string;
+  license_expiry?: string;
   phone?: string;
   contact_number?: string;
+  branch_id?: string;
+  is_active?: boolean;
   created_at?: string;
 }
 

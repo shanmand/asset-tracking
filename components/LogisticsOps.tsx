@@ -17,6 +17,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>([]);
+  const [activeShifts, setActiveShifts] = useState<{driver_id: string, truck_id: string}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [origin, setOrigin] = useState('');
@@ -46,14 +47,16 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
     setIsLoading(true);
     try {
-      const [locsRes, batchesRes, trucksRes, driversRes, assetsRes] = await Promise.all([
+      const [locsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
         supabase.from('locations').select('*'),
         supabase.from('batches').select('*'),
         supabase.from('trucks').select('*'),
         supabase.from('drivers').select('*'),
-        supabase.from('asset_master').select('*')
+        supabase.from('asset_master').select('*'),
+        supabase.from('driver_shifts').select('driver_id, truck_id').is('end_time', null)
       ]);
 
+      if (shiftsRes.data) setActiveShifts(shiftsRes.data);
       if (locsRes.data) {
         setLocations(locsRes.data);
         if (locsRes.data.length > 0) {
@@ -93,6 +96,14 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     const newAssets = [...assets];
     newAssets[index] = { ...newAssets[index], [field]: value };
     setAssets(newAssets);
+  };
+
+  const handleDriverChange = (id: string) => {
+    setDriverId(id);
+    const shift = activeShifts.find(s => s.driver_id === id);
+    if (shift) {
+      setTruckId(shift.truck_id);
+    }
   };
 
   const handleCaptureMovement = async (e: React.FormEvent) => {
@@ -373,7 +384,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                       <select 
                         className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
                         value={driverId}
-                        onChange={e => setDriverId(e.target.value)}
+                        onChange={e => handleDriverChange(e.target.value)}
                       >
                         <option value="">Select Driver</option>
                         {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}

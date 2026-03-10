@@ -329,7 +329,73 @@ USING (bucket_id = 'thaan-slips');
 -- Allow authenticated uploads to thaan-slips
 CREATE POLICY "Authenticated Upload Access"
 ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'thaan-slips');`}
+WITH CHECK (bucket_id = 'thaan-slips');
+
+-- 13. Create Tasks Table
+-- Drop old constraint if it exists from previous schema version
+ALTER TABLE IF EXISTS public.tasks DROP CONSTRAINT IF EXISTS tasks_assigned_to_fkey;
+
+CREATE TABLE IF NOT EXISTS public.tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'Pending',
+    priority TEXT DEFAULT 'Medium',
+    due_date TIMESTAMPTZ,
+    assigned_to TEXT,
+    branch_id TEXT REFERENCES public.branches(id),
+    location_id TEXT REFERENCES public.locations(id),
+    created_by UUID REFERENCES public.users(id) DEFAULT auth.uid(),
+    task_type TEXT DEFAULT 'General',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure existing table is updated if it already exists
+ALTER TABLE IF EXISTS public.tasks 
+    ALTER COLUMN due_date TYPE TIMESTAMPTZ,
+    ALTER COLUMN assigned_to TYPE TEXT;
+
+-- 14. Enable RLS for Tasks
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+-- 15. Create RLS Policy for Tasks
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'tasks' AND policyname = 'Allow public read access') THEN
+        CREATE POLICY "Allow public read access" ON public.tasks FOR SELECT USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'tasks' AND policyname = 'Allow all access') THEN
+        CREATE POLICY "Allow all access" ON public.tasks FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- 16. Personnel View
+CREATE OR REPLACE VIEW public.vw_assignable_personnel AS
+SELECT 
+    id::text, 
+    full_name as name, 
+    role_name as role, 
+    'User' as type,
+    branch_id,
+    is_active
+FROM public.users
+UNION ALL
+SELECT 
+    id, 
+    full_name as name, 
+    'Driver' as role, 
+    'Driver' as type,
+    branch_id,
+    is_active
+FROM public.drivers;
+
+-- 17. Update Personnel Tables (Run if tables already exist)
+ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS branch_id TEXT REFERENCES public.branches(id);
+ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS contact_number TEXT;
+ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS license_number TEXT;
+ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS branch_id TEXT REFERENCES public.branches(id);
+ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`}
             </pre>
             <div className="p-4 bg-amber-900/20 border border-amber-900/50 rounded-xl flex gap-4">
               <AlertTriangle className="text-amber-500 shrink-0" size={24} />

@@ -29,7 +29,8 @@ import {
   Database,
   Gavel,
   Tags,
-  ArrowDownToLine
+  ArrowDownToLine,
+  Clock
 } from 'lucide-react';
 import { UserProvider, useUser } from './UserContext';
 import DashboardView from './components/DashboardView';
@@ -54,6 +55,9 @@ import TaskManagement from './components/TaskManagement';
 import StockTakeModule from './components/StockTakeModule';
 import SettlementModule from './components/SettlementModule';
 import LiabilityHeatmap from './components/LiabilityHeatmap';
+import PersonnelManagement from './components/PersonnelManagement';
+import ShiftManagement from './components/ShiftManagement';
+import FleetCompliance from './components/FleetCompliance';
 import { useBranches } from './useBranches';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
@@ -80,7 +84,10 @@ enum NavItem {
   TASKS = 'tasks',
   STOCK_TAKE = 'stock-take',
   FINANCE_SETTLEMENT = 'finance-settlement',
-  LIABILITY_HEATMAP = 'liability-heatmap'
+  LIABILITY_HEATMAP = 'liability-heatmap',
+  PERSONNEL = 'personnel',
+  SHIFTS = 'shifts',
+  COMPLIANCE = 'compliance'
 }
 
 const AppContent: React.FC = () => {
@@ -130,6 +137,9 @@ const AppContent: React.FC = () => {
       case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialLocationId={preselectedStockTakeLocation} />;
       case NavItem.FINANCE_SETTLEMENT: return <SettlementModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.LIABILITY_HEATMAP: return <LiabilityHeatmap />;
+      case NavItem.PERSONNEL: return <PersonnelManagement />;
+      case NavItem.SHIFTS: return <ShiftManagement />;
+      case NavItem.COMPLIANCE: return <FleetCompliance />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -166,7 +176,10 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.ASSETS} onClick={() => setActiveTab(NavItem.ASSETS)} icon={<Tags size={18} />} label="Asset Registry" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">System</div>
+          <SidebarButton active={activeTab === NavItem.COMPLIANCE} onClick={() => setActiveTab(NavItem.COMPLIANCE)} icon={<ShieldCheck size={18} />} label="Fleet Compliance" />
           <SidebarButton active={activeTab === NavItem.LOGISTICS_REGISTRY} onClick={() => setActiveTab(NavItem.LOGISTICS_REGISTRY)} icon={<Truck size={18} />} label="Logistics Registry" />
+          <SidebarButton active={activeTab === NavItem.SHIFTS} onClick={() => setActiveTab(NavItem.SHIFTS)} icon={<Clock size={18} />} label="Shift Assignments" />
+          <SidebarButton active={activeTab === NavItem.PERSONNEL} onClick={() => setActiveTab(NavItem.PERSONNEL)} icon={<UsersIcon size={18} />} label="Personnel Management" />
           <SidebarButton active={activeTab === NavItem.ADMIN} onClick={() => setActiveTab(NavItem.ADMIN)} icon={<Settings size={18} />} label="Admin Panel" />
           <SidebarButton active={activeTab === NavItem.USERS} onClick={() => setActiveTab(NavItem.USERS)} icon={<UsersIcon size={18} />} label="User Management" />
           <SidebarButton active={activeTab === NavItem.LOCATIONS} onClick={() => setActiveTab(NavItem.LOCATIONS)} icon={<MapPin size={18} />} label="Location Registry" />

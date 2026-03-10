@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter } from 'lucide-react';
+import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Truck, Driver } from '../types';
+import { Truck, Driver, Branch } from '../types';
+import BranchSelector from './BranchSelector';
 
 const LogisticsRegistry: React.FC = () => {
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingTruck, setIsAddingTruck] = useState(false);
   const [isAddingDriver, setIsAddingDriver] = useState(false);
@@ -15,25 +17,32 @@ const LogisticsRegistry: React.FC = () => {
 
   const [newTruck, setNewTruck] = useState({
     id: '',
-    plate_number: ''
+    plate_number: '',
+    license_disc_expiry: '',
+    branch_id: ''
   });
 
   const [newDriver, setNewDriver] = useState({
     id: '',
     full_name: '',
-    contact_number: ''
+    contact_number: '',
+    license_number: '',
+    license_expiry: '',
+    branch_id: ''
   });
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
-      const [trucksRes, driversRes] = await Promise.all([
+      const [trucksRes, driversRes, branchesRes] = await Promise.all([
         supabase.from('trucks').select('*'),
-        supabase.from('drivers').select('*')
+        supabase.from('drivers').select('*'),
+        supabase.from('branches').select('*').order('name')
       ]);
       if (trucksRes.data) setTrucks(trucksRes.data);
       if (driversRes.data) setDrivers(driversRes.data);
+      if (branchesRes.data) setBranches(branchesRes.data);
     } catch (err: any) {
       console.error("Fetch error:", err);
     } finally {
@@ -54,7 +63,7 @@ const LogisticsRegistry: React.FC = () => {
       if (error) throw error;
       setNotification({ msg: `Truck ${newTruck.plate_number} registered`, type: 'success' });
       setIsAddingTruck(false);
-      setNewTruck({ id: '', plate_number: '' });
+      setNewTruck({ id: '', plate_number: '', license_disc_expiry: '', branch_id: '' });
       fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to register truck", type: 'error' });
@@ -73,7 +82,7 @@ const LogisticsRegistry: React.FC = () => {
       if (error) throw error;
       setNotification({ msg: `Driver ${newDriver.full_name} registered`, type: 'success' });
       setIsAddingDriver(false);
-      setNewDriver({ id: '', full_name: '', contact_number: '' });
+      setNewDriver({ id: '', full_name: '', contact_number: '', license_number: '', license_expiry: '', branch_id: '' });
       fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to register driver", type: 'error' });
@@ -134,15 +143,35 @@ const LogisticsRegistry: React.FC = () => {
       {isAddingTruck && (
         <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in zoom-in-95">
           <h4 className="font-black text-sm uppercase tracking-widest mb-6">Register New Truck</h4>
-          <form onSubmit={handleAddTruck} className="flex flex-col md:flex-row gap-4">
-            <input 
-              required
-              placeholder="Plate Number (e.g. CA 123-456)"
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={newTruck.plate_number}
-              onChange={e => setNewTruck({...newTruck, plate_number: e.target.value})}
-            />
-            <div className="flex gap-2">
+          <form onSubmit={handleAddTruck} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Plate Number</label>
+              <input 
+                required
+                placeholder="e.g. CA 123-456"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newTruck.plate_number}
+                onChange={e => setNewTruck({...newTruck, plate_number: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Disc Expiry</label>
+              <input 
+                type="date"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newTruck.license_disc_expiry}
+                onChange={e => setNewTruck({...newTruck, license_disc_expiry: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignment</label>
+              <BranchSelector 
+                value={newTruck.branch_id}
+                onChange={val => setNewTruck({...newTruck, branch_id: val})}
+                placeholder="Select Branch..."
+              />
+            </div>
+            <div className="md:col-span-3 flex gap-2 pt-2">
               <button type="submit" className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs">SAVE TRUCK</button>
               <button type="button" onClick={() => setIsAddingTruck(false)} className="px-4 py-3 bg-slate-100 text-slate-400 rounded-xl font-black text-xs">CANCEL</button>
             </div>
@@ -153,21 +182,53 @@ const LogisticsRegistry: React.FC = () => {
       {isAddingDriver && (
         <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in zoom-in-95">
           <h4 className="font-black text-sm uppercase tracking-widest mb-6">Register New Driver</h4>
-          <form onSubmit={handleAddDriver} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input 
-              required
-              placeholder="Full Name"
-              className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={newDriver.full_name}
-              onChange={e => setNewDriver({...newDriver, full_name: e.target.value})}
-            />
-            <input 
-              placeholder="Contact Number"
-              className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={newDriver.contact_number}
-              onChange={e => setNewDriver({...newDriver, contact_number: e.target.value})}
-            />
-            <div className="md:col-span-2 flex gap-2">
+          <form onSubmit={handleAddDriver} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Full Name</label>
+              <input 
+                required
+                placeholder="Full Name"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newDriver.full_name}
+                onChange={e => setNewDriver({...newDriver, full_name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Contact Number</label>
+              <input 
+                placeholder="Contact Number"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newDriver.contact_number}
+                onChange={e => setNewDriver({...newDriver, contact_number: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Number</label>
+              <input 
+                placeholder="License Number"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newDriver.license_number}
+                onChange={e => setNewDriver({...newDriver, license_number: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Expiry</label>
+              <input 
+                type="date"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newDriver.license_expiry}
+                onChange={e => setNewDriver({...newDriver, license_expiry: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignment</label>
+              <BranchSelector 
+                value={newDriver.branch_id}
+                onChange={val => setNewDriver({...newDriver, branch_id: val})}
+                placeholder="Select Branch..."
+              />
+            </div>
+            <div className="lg:col-span-3 flex gap-2 pt-2">
               <button type="submit" className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs">SAVE DRIVER</button>
               <button type="button" onClick={() => setIsAddingDriver(false)} className="px-4 py-3 bg-slate-100 text-slate-400 rounded-xl font-black text-xs">CANCEL</button>
             </div>
@@ -190,7 +251,12 @@ const LogisticsRegistry: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white transition-colors">
                     <TruckIcon size={20} />
                   </div>
-                  <span className="font-black text-slate-900">{t.plate_number}</span>
+                  <div>
+                    <p className="font-black text-slate-900 leading-none">{t.plate_number}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
+                      <MapPin size={10} /> {branches.find(b => b.id === t.branch_id)?.name || 'Unassigned'}
+                    </p>
+                  </div>
                 </div>
                 <button onClick={() => handleDeleteTruck(t.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
               </div>
@@ -214,7 +280,9 @@ const LogisticsRegistry: React.FC = () => {
                   </div>
                   <div>
                     <p className="font-black text-slate-900 leading-none">{d.full_name}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{d.contact_number || 'No Contact'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
+                      <MapPin size={10} /> {branches.find(b => b.id === d.branch_id)?.name || 'Unassigned'}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => handleDeleteDriver(d.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>

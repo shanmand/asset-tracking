@@ -8,6 +8,8 @@ import {
   Clock, 
   CheckCircle2, 
   AlertCircle, 
+  AlertTriangle,
+  RefreshCw,
   MoreVertical, 
   Trash2, 
   Pencil,
@@ -19,8 +21,16 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BranchSelector from './BranchSelector';
-import { Task, User } from '../types';
+import { Task, User, Location } from '../types';
 import { useUser } from '../UserContext';
+
+interface Personnel {
+  id: string;
+  name: string;
+  role: string;
+  type: 'User' | 'Driver';
+  branch_id?: string;
+}
 
 interface TaskManagementProps {
   onStartStockTake?: (locationId: string) => void;
@@ -30,9 +40,14 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
   const { profile } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [personnel, setPersonnel] = useState<Personnel[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
+  const [quickAddType, setQuickAddType] = useState<'User' | 'Driver'>('User');
+  const [quickAddName, setQuickAddName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   
@@ -47,7 +62,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
     description: '',
     status: 'Pending' as const,
     priority: 'Medium' as const,
-    due_date: new Date().toISOString().split('T')[0],
+    due_date: new Date().toISOString().slice(0, 16),
     assigned_to: '',
     branch_id: '',
     task_type: 'General' as 'General' | 'Stock Take',
@@ -61,14 +76,24 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
     }
     setIsLoading(true);
     try {
-      const [tasksRes, usersRes, locsRes] = await Promise.all([
+      const [tasksRes, usersRes, locsRes, personnelRes] = await Promise.all([
         supabase.from('tasks').select('*').order('created_at', { ascending: false }),
         supabase.from('users').select('*'),
-        supabase.from('locations').select('*').order('name')
+        supabase.from('locations').select('*').order('name'),
+        supabase.from('vw_assignable_personnel').select('*')
       ]);
 
+      if (tasksRes.error) {
+        if (tasksRes.error.code === '42P01' || tasksRes.status === 404) {
+          setError('DATABASE_SETUP_REQUIRED');
+        } else {
+          throw tasksRes.error;
+        }
+      }
+      
       if (tasksRes.data) setTasks(tasksRes.data);
       if (locsRes.data) setLocations(locsRes.data);
+      if (personnelRes.data) setPersonnel(personnelRes.data);
       if (usersRes.data) {
         setUsers(usersRes.data.map((u: any) => ({
           id: u.id,
@@ -117,7 +142,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
           description: finalDescription,
           status: newTask.status,
           priority: newTask.priority,
-          due_date: newTask.due_date,
+          due_date: new Date(newTask.due_date).toISOString(),
           assigned_to: newTask.assigned_to || null,
           branch_id: newTask.branch_id || null,
           task_type: newTask.task_type,
@@ -134,7 +159,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
           description: '',
           status: 'Pending',
           priority: 'Medium',
-          due_date: new Date().toISOString().split('T')[0],
+          due_date: new Date().toISOString().slice(0, 16),
           assigned_to: '',
           branch_id: '',
           task_type: 'General',
@@ -161,7 +186,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
           description: editingTask.description,
           status: editingTask.status,
           priority: editingTask.priority,
-          due_date: editingTask.due_date,
+          due_date: new Date(editingTask.due_date).toISOString(),
           assigned_to: editingTask.assigned_to || null
         })
         .eq('id', editingTask.id);
@@ -188,6 +213,34 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
     }
   };
 
+  const handleQuickAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddName) return;
+    setIsLoading(true);
+    try {
+      if (quickAddType === 'Driver') {
+        const id = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
+        const { error } = await supabase.from('drivers').insert([{ id, full_name: quickAddName }]);
+        if (error) throw error;
+      } else {
+        // For User, we'd normally need auth, but for "Quick Add" in this context, 
+        // we'll just add to public.users if possible or alert that auth is needed.
+        // Assuming we can insert into public.users for this demo/app structure
+        const id = crypto.randomUUID();
+        const { error } = await supabase.from('users').insert([{ id, full_name: quickAddName, email: `${quickAddName.toLowerCase().replace(' ', '.')}@shuku.internal` }]);
+        if (error) throw error;
+      }
+      await fetchData();
+      setIsQuickAddModalOpen(false);
+      setQuickAddName('');
+    } catch (err: any) {
+      console.error("Quick Add Error:", err);
+      alert(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const filteredAndSortedTasks = useMemo(() => {
     return tasks
       .filter(t => {
@@ -202,6 +255,38 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
         return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
       });
   }, [tasks, searchQuery, statusFilter, sortOrder]);
+
+  if (error === 'DATABASE_SETUP_REQUIRED') {
+    return (
+      <div className="max-w-4xl mx-auto p-12 text-center space-y-8 bg-white rounded-3xl border border-slate-200 shadow-sm">
+        <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto text-amber-600">
+          <AlertTriangle size={40} />
+        </div>
+        <div className="space-y-4">
+          <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Database Setup Required</h3>
+          <p className="text-slate-500 font-medium max-w-md mx-auto">
+            The <strong>tasks</strong> table was not found in your database. This is common after a schema update.
+          </p>
+        </div>
+        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-left space-y-4">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How to fix:</p>
+          <ol className="text-xs text-slate-600 space-y-3 font-bold list-decimal pl-4">
+            <li>Go to the <strong>Data Schema</strong> tab in this app.</li>
+            <li>Select the <strong>SQL Migrations</strong> view.</li>
+            <li>Copy the SQL code under <strong>"13. Create Tasks Table"</strong>.</li>
+            <li>Paste and run it in your <strong>Supabase SQL Editor</strong>.</li>
+            <li>Refresh this page.</li>
+          </ol>
+        </div>
+        <button 
+          onClick={() => { setError(null); fetchData(); }}
+          className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all flex items-center gap-2 mx-auto"
+        >
+          <RefreshCw size={18} /> I'VE RUN THE SQL, REFRESH NOW
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading && tasks.length === 0) {
     return (
@@ -283,7 +368,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
             <div className="space-y-3 pt-4 border-t border-slate-50">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <Calendar size={14} /> Due: {new Date(task.due_date).toLocaleDateString()}
+                  <Calendar size={14} /> Due: {new Date(task.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                 </div>
                 <div className={`flex items-center gap-1 ${
                   task.status === 'Completed' ? 'text-emerald-500' :
@@ -298,10 +383,10 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200">
-                    {users.find(u => u.id === task.assigned_to)?.name.charAt(0) || <UserIcon size={12} />}
+                    {personnel.find(p => p.id === task.assigned_to)?.name.charAt(0) || <UserIcon size={12} />}
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase">
-                    {users.find(u => u.id === task.assigned_to)?.name || 'Unassigned'}
+                    {personnel.find(p => p.id === task.assigned_to)?.name || 'Unassigned'}
                   </span>
                 </div>
                 {task.task_type === 'Stock Take' && task.location_id && task.status !== 'Completed' && (
@@ -393,28 +478,50 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
               
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</label>
-                  <select 
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Due Date & Time</label>
+                  <input 
+                    required
+                    type="datetime-local"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                    value={isTaskModalOpen ? newTask.status : editingTask?.status}
-                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, status: e.target.value as any}) : setEditingTask({...editingTask!, status: e.target.value as any})}
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                  </select>
+                    value={isTaskModalOpen ? newTask.due_date : (editingTask?.due_date ? new Date(editingTask.due_date).toISOString().slice(0, 16) : '')}
+                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, due_date: e.target.value}) : setEditingTask({...editingTask!, due_date: e.target.value})}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Assignee</label>
-                  <select 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                    value={isTaskModalOpen ? newTask.assigned_to : editingTask?.assigned_to}
-                    onChange={e => isTaskModalOpen ? setNewTask({...newTask, assigned_to: e.target.value}) : setEditingTask({...editingTask!, assigned_to: e.target.value})}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
+                  <div className="flex gap-2">
+                    <select 
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                      value={isTaskModalOpen ? newTask.assigned_to : editingTask?.assigned_to}
+                      onChange={e => isTaskModalOpen ? setNewTask({...newTask, assigned_to: e.target.value}) : setEditingTask({...editingTask!, assigned_to: e.target.value})}
+                    >
+                      <option value="">Unassigned</option>
+                      {personnel
+                        .filter(p => !newTask.branch_id || p.branch_id === newTask.branch_id)
+                        .map(p => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+                    </select>
+                    <button 
+                      type="button"
+                      onClick={() => setIsQuickAddModalOpen(true)}
+                      className="p-4 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={isTaskModalOpen ? newTask.status : editingTask?.status}
+                  onChange={e => isTaskModalOpen ? setNewTask({...newTask, status: e.target.value as any}) : setEditingTask({...editingTask!, status: e.target.value as any})}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -431,6 +538,54 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
                 className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 mt-4"
               >
                 {isTaskModalOpen ? 'CREATE TASK' : 'SAVE CHANGES'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Quick Add Modal */}
+      {isQuickAddModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h4 className="font-black text-sm text-slate-900 uppercase tracking-widest">Quick Add Personnel</h4>
+              <button onClick={() => setIsQuickAddModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleQuickAdd} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Type</label>
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button 
+                    type="button"
+                    onClick={() => setQuickAddType('User')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${quickAddType === 'User' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    User
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setQuickAddType('Driver')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${quickAddType === 'Driver' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    Driver
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Full Name</label>
+                <input 
+                  required
+                  autoFocus
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={quickAddName}
+                  onChange={e => setQuickAddName(e.target.value)}
+                />
+              </div>
+              <button 
+                type="submit"
+                className="w-full bg-slate-900 text-white font-black py-3 rounded-xl hover:bg-slate-800 transition-all text-xs uppercase tracking-widest"
+              >
+                ADD TO REGISTRY
               </button>
             </form>
           </div>
