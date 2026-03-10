@@ -20,6 +20,7 @@ import {
   X
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { normalizePayload } from '../supabaseUtils';
 import BranchSelector from './BranchSelector';
 import { Task, User, Location } from '../types';
 import { useUser } from '../UserContext';
@@ -137,7 +138,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
 
       const { data, error } = await supabase
         .from('tasks')
-        .insert([{
+        .insert([normalizePayload({
           title: newTask.title,
           description: finalDescription,
           status: newTask.status,
@@ -147,7 +148,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
           branch_id: newTask.branch_id || null,
           task_type: newTask.task_type,
           location_id: newTask.location_id || null
-        }])
+        })])
         .select();
 
       if (error) throw error;
@@ -240,6 +241,12 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
       setIsLoading(false);
     }
   };
+
+  const filteredLocations = useMemo(() => {
+    const selectedBranch = isTaskModalOpen ? newTask.branch_id : editingTask?.branch_id;
+    if (!selectedBranch) return locations;
+    return locations.filter(l => l.branch_id === selectedBranch);
+  }, [locations, newTask.branch_id, editingTask?.branch_id, isTaskModalOpen]);
 
   const filteredAndSortedTasks = useMemo(() => {
     return tasks
@@ -471,7 +478,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
                     onChange={e => isTaskModalOpen ? setNewTask({...newTask, location_id: e.target.value}) : setEditingTask({...editingTask!, location_id: e.target.value})}
                   >
                     <option value="">Select Location...</option>
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {filteredLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
               )}

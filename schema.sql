@@ -175,6 +175,7 @@ CREATE TABLE public.batch_movements (
     driver_id TEXT REFERENCES public.drivers(id),
     condition TEXT DEFAULT 'Clean',
     origin_user_id UUID REFERENCES public.users(id),
+    quantity INTEGER,
     transaction_date DATE DEFAULT CURRENT_DATE,
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
@@ -292,18 +293,16 @@ CREATE TABLE public.claim_audits (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.audit_logs (
+CREATE TABLE public.branch_budgets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    table_name TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    action TEXT NOT NULL,
-    old_data JSONB,
-    new_data JSONB,
-    performed_by UUID REFERENCES public.users(id),
+    branch_id TEXT REFERENCES public.branches(id),
+    asset_type TEXT, -- Supermarket, QSR
+    month DATE NOT NULL,
+    budget_revenue_zar NUMERIC(12, 2) DEFAULT 0,
+    budget_maintenance_zar NUMERIC(12, 2) DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. FUNCTIONS & RPCS
 CREATE OR REPLACE FUNCTION calculate_batch_accrual(batch_id_input TEXT)
 RETURNS NUMERIC AS $$
 DECLARE
@@ -554,6 +553,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 5. VIEWS
+DROP VIEW IF EXISTS public.vw_master_logistics_trace;
 CREATE OR REPLACE VIEW public.vw_master_logistics_trace AS
 SELECT 
     bm.id AS movement_id,
@@ -561,7 +561,7 @@ SELECT
     bm.transaction_date,
     bm.timestamp,
     d.full_name AS driver_name,
-    b.quantity,
+    COALESCE(bm.quantity, b.quantity) AS quantity,
     l_to.name AS to_location_name,
     l_to.id AS to_location_id,
     l_from.name AS from_location_name,
@@ -575,6 +575,7 @@ JOIN public.locations l_from ON bm.from_location_id = l_from.id
 LEFT JOIN public.drivers d ON bm.driver_id = d.id
 LEFT JOIN public.trucks t ON bm.truck_id = t.id;
 
+DROP VIEW IF EXISTS public.vw_daily_burn_rate;
 CREATE OR REPLACE VIEW public.vw_daily_burn_rate AS
 SELECT br.name AS branch_name, l.name AS location_name, l.id AS location_id, br.id AS branch_id, SUM(bt.quantity * fs.amount_zar) AS daily_burn_rate, COUNT(bt.id) AS batch_count, AVG(CURRENT_DATE - bt.transaction_date) AS avg_duration_days
 FROM public.batches bt JOIN public.asset_master a ON bt.asset_id = a.id JOIN public.locations l ON bt.current_location_id = l.id JOIN public.branches br ON l.branch_id = br.id JOIN public.fee_schedule fs ON a.id = fs.asset_id
@@ -710,5 +711,54 @@ SELECT
 FROM public.truck_roadworthy_history rh
 JOIN public.trucks t ON rh.truck_id = t.id
 JOIN public.branches b ON t.branch_id = b.id;
+
+-- 18. Management Reporting Views
+CREATE OR REPLACE VIEW public.vw_management_kpis AS
+WITH batch_stats AS (
+    SELECT 
+        AVG(EXTRACT(DAY FROM (confirmation_date::timestamp - transaction_date::timestamp))) FILTER (WHERE transfer_confirmed_by_customer = true) as avg_cycle_time,
+        COUNT(*) as total_batches,
+        SUM(quantity) as total_units
+    FROM public.batches
+),
+shrinkage_stats AS (
+    SELECT 
+        (SUM(ABS(variance))::float / NULLIF(SUM(system_quantity), 0)) * 100 as shrinkage_rate
+    FROM public.stock_take_items
+),
+financial_stats AS (
+    SELECT 
+        SUM(amount) as total_compliance_cost
+    FROM public.vw_branch_fleet_expenses
+    WHERE expense_date >= date_trunc('month', current_date)
+)
+SELECT 
+    COALESCE(bs.avg_cycle_time, 0) as crate_cycle_time,
+    COALESCE(ss.shrinkage_rate, 0) as shrinkage_rate,
+    COALESCE(fs.total_compliance_cost, 0) as monthly_compliance_cost
+FROM batch_stats bs, shrinkage_stats ss, financial_stats fs;
+
+CREATE OR REPLACE VIEW public.vw_location_unconfirmed_value AS
+SELECT 
+    l.id as location_id,
+    l.name as location_name,
+    l.branch_id,
+    SUM(b.quantity) as unit_count,
+    SUM(b.quantity * 450) as estimated_value_zar
+FROM public.batches b
+JOIN public.locations l ON b.current_location_id = l.id
+WHERE b.transfer_confirmed_by_customer = false
+GROUP BY l.id, l.name, l.branch_id;
+
+CREATE OR REPLACE VIEW public.vw_batch_accruals AS
+SELECT 
+    b.id as batch_id,
+    b.asset_id,
+    b.quantity,
+    b.current_location_id,
+    b.transaction_date,
+    b.transfer_confirmed_by_customer,
+    public.calculate_batch_accrual(b.id) as accrued_amount
+FROM public.batches b;
 ('SH-P01', 'Replacement Fee (Lost Equipment)', 1200.00, '2026-01-01')
 ON CONFLICT DO NOTHING;

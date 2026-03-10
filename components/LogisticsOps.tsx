@@ -4,6 +4,7 @@ import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle,
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
 import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { normalizePayload } from '../supabaseUtils';
 
 interface LogisticsOpsProps {
   currentUser: UserType;
@@ -150,24 +151,25 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           // Handle Partial Movement
           if (item.quantity < batch.quantity) {
             // Use RPC to split the batch atomically
-            const { data: newBatchId, error: splitError } = await supabase.rpc('split_batch', {
+            const { data: newBatchId, error: splitError } = await supabase.rpc('split_batch', normalizePayload({
               original_batch_id: item.batchId,
               move_qty: item.quantity,
               new_location_id: destination,
               move_date: movementDate
-            });
+            }));
 
             if (splitError) throw splitError;
-            targetBatchId = newBatchId as string;
+            if (!newBatchId) throw new Error("Failed to generate new batch ID during split");
+            targetBatchId = String(newBatchId);
           } else {
             // Full Movement
             const { error: updateError } = await supabase
               .from('batches')
-              .update({ 
+              .update(normalizePayload({ 
                 current_location_id: destination,
                 status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success',
                 transaction_date: movementDate
-              })
+              }))
               .eq('id', item.batchId);
 
             if (updateError) throw updateError;
@@ -178,16 +180,17 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           // Record the movement
           const { error: moveError } = await supabase
             .from('batch_movements')
-            .insert([{
-              batch_id: String(targetBatchId),
-              from_location_id: String(origin),
-              to_location_id: String(destination),
-              truck_id: String(truckId),
-              driver_id: String(driverId),
+            .insert([normalizePayload({
+              batch_id: targetBatchId,
+              from_location_id: origin,
+              to_location_id: destination,
+              truck_id: truckId,
+              driver_id: driverId,
+              quantity: item.quantity,
               timestamp: new Date(movementDate).toISOString(),
               condition: condition,
-              origin_user_id: String(currentUser.id)
-            }]);
+              origin_user_id: currentUser.id
+            })]);
 
           if (moveError) throw moveError;
         }

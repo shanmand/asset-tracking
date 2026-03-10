@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardCheck, AlertTriangle, Search, MapPin, Package, History, TrendingDown, Loader2, CheckCircle2, Plus } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { normalizePayload } from '../supabaseUtils';
 import BranchSelector from './BranchSelector';
 import { Batch, Location, AssetMaster, User } from '../types';
 
@@ -80,16 +81,16 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialL
     setIsSubmitting(true);
     try {
       const items = batches.map(b => ({
-        batch_id: b.id,
+        batch_id: String(b.id),
         physical_count: physicalCounts[b.id] ?? b.quantity
       }));
 
-      const { data, error } = await supabase.rpc('process_stock_take', {
+      const { data, error } = await supabase.rpc('process_stock_take', normalizePayload({
         p_location_id: selectedLocation,
         p_performed_by: currentUser.id,
         p_notes: notes,
         p_items: items
-      });
+      }));
 
       if (error) throw error;
 
