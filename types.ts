@@ -127,6 +127,7 @@ export interface Truck {
   model?: string;
   capacity?: number;
   license_disc_expiry?: string;
+  last_renewal_cost_zar?: number;
   branch_id?: string;
   created_at?: string;
 }
@@ -137,6 +138,8 @@ export interface TruckRoadworthyHistory {
   test_date: string;
   expiry_date: string;
   certificate_number?: string;
+  test_fee_zar?: number;
+  repair_costs_zar?: number;
   result?: string;
   notes?: string;
   created_at?: string;

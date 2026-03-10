@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin } from 'lucide-react';
+import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin, Edit2, X, Loader2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Truck, Driver, Branch } from '../types';
 import BranchSelector from './BranchSelector';
@@ -12,6 +12,8 @@ const LogisticsRegistry: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingTruck, setIsAddingTruck] = useState(false);
   const [isAddingDriver, setIsAddingDriver] = useState(false);
+  const [editingTruck, setEditingTruck] = useState<Truck | null>(null);
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -19,6 +21,7 @@ const LogisticsRegistry: React.FC = () => {
     id: '',
     plate_number: '',
     license_disc_expiry: '',
+    last_renewal_cost_zar: 0,
     branch_id: ''
   });
 
@@ -63,7 +66,7 @@ const LogisticsRegistry: React.FC = () => {
       if (error) throw error;
       setNotification({ msg: `Truck ${newTruck.plate_number} registered`, type: 'success' });
       setIsAddingTruck(false);
-      setNewTruck({ id: '', plate_number: '', license_disc_expiry: '', branch_id: '' });
+      setNewTruck({ id: '', plate_number: '', license_disc_expiry: '', last_renewal_cost_zar: 0, branch_id: '' });
       fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to register truck", type: 'error' });
@@ -86,6 +89,59 @@ const LogisticsRegistry: React.FC = () => {
       fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to register driver", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleUpdateTruck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTruck) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('trucks')
+        .update({
+          plate_number: editingTruck.plate_number,
+          license_disc_expiry: editingTruck.license_disc_expiry,
+          last_renewal_cost_zar: editingTruck.last_renewal_cost_zar,
+          branch_id: editingTruck.branch_id
+        })
+        .eq('id', editingTruck.id);
+      if (error) throw error;
+      setNotification({ msg: `Truck ${editingTruck.plate_number} updated`, type: 'success' });
+      setEditingTruck(null);
+      fetchData();
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to update truck", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleUpdateDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDriver) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('drivers')
+        .update({
+          full_name: editingDriver.full_name,
+          contact_number: editingDriver.contact_number,
+          license_number: editingDriver.license_number,
+          license_expiry: editingDriver.license_expiry,
+          branch_id: editingDriver.branch_id
+        })
+        .eq('id', editingDriver.id);
+      if (error) throw error;
+      setNotification({ msg: `Driver ${editingDriver.full_name} updated`, type: 'success' });
+      setEditingDriver(null);
+      fetchData();
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to update driver", type: 'error' });
     } finally {
       setIsLoading(false);
       setTimeout(() => setNotification(null), 3000);
@@ -169,6 +225,16 @@ const LogisticsRegistry: React.FC = () => {
                 value={newTruck.branch_id}
                 onChange={val => setNewTruck({...newTruck, branch_id: val})}
                 placeholder="Select Branch..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Renewal Cost (ZAR)</label>
+              <input 
+                type="number"
+                placeholder="0.00"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newTruck.last_renewal_cost_zar}
+                onChange={e => setNewTruck({...newTruck, last_renewal_cost_zar: parseFloat(e.target.value) || 0})}
               />
             </div>
             <div className="md:col-span-3 flex gap-2 pt-2">
@@ -258,7 +324,10 @@ const LogisticsRegistry: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => handleDeleteTruck(t.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditingTruck(t)} className="p-2 text-slate-300 hover:text-slate-900 transition-colors"><Edit2 size={18} /></button>
+                  <button onClick={() => handleDeleteTruck(t.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
+                </div>
               </div>
             ))}
             {trucks.length === 0 && <div className="p-12 text-center text-slate-300 italic text-sm">No trucks registered</div>}
@@ -285,13 +354,143 @@ const LogisticsRegistry: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => handleDeleteDriver(d.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditingDriver(d)} className="p-2 text-slate-300 hover:text-slate-900 transition-colors"><Edit2 size={18} /></button>
+                  <button onClick={() => handleDeleteDriver(d.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
+                </div>
               </div>
             ))}
             {drivers.length === 0 && <div className="p-12 text-center text-slate-300 italic text-sm">No drivers registered</div>}
           </div>
         </div>
       </div>
+
+      {/* Edit Truck Modal */}
+      {editingTruck && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">Edit Truck</h4>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Update Fleet Information</p>
+              </div>
+              <button onClick={() => setEditingTruck(null)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleUpdateTruck} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Plate Number</label>
+                <input 
+                  required
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingTruck.plate_number}
+                  onChange={e => setEditingTruck({...editingTruck, plate_number: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Disc Expiry</label>
+                <input 
+                  type="date"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingTruck.license_disc_expiry || ''}
+                  onChange={e => setEditingTruck({...editingTruck, license_disc_expiry: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Renewal Cost (ZAR)</label>
+                <input 
+                  type="number"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingTruck.last_renewal_cost_zar || 0}
+                  onChange={e => setEditingTruck({...editingTruck, last_renewal_cost_zar: parseFloat(e.target.value) || 0})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignment</label>
+                <BranchSelector 
+                  value={editingTruck.branch_id}
+                  onChange={val => setEditingTruck({...editingTruck, branch_id: val})}
+                />
+              </div>
+              <div className="md:col-span-2 pt-4">
+                <button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'UPDATE TRUCK'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Driver Modal */}
+      {editingDriver && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">Edit Driver</h4>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Update Driver Information</p>
+              </div>
+              <button onClick={() => setEditingDriver(null)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleUpdateDriver} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Full Name</label>
+                <input 
+                  required
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingDriver.full_name}
+                  onChange={e => setEditingDriver({...editingDriver, full_name: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Contact Number</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingDriver.contact_number || ''}
+                  onChange={e => setEditingDriver({...editingDriver, contact_number: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Number</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingDriver.license_number || ''}
+                  onChange={e => setEditingDriver({...editingDriver, license_number: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Expiry</label>
+                <input 
+                  type="date"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingDriver.license_expiry || ''}
+                  onChange={e => setEditingDriver({...editingDriver, license_expiry: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignment</label>
+                <BranchSelector 
+                  value={editingDriver.branch_id}
+                  onChange={val => setEditingDriver({...editingDriver, branch_id: val})}
+                />
+              </div>
+              <div className="md:col-span-2 pt-4">
+                <button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'UPDATE DRIVER'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

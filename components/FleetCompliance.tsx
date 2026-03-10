@@ -40,6 +40,8 @@ const FleetCompliance: React.FC = () => {
     test_date: new Date().toISOString().split('T')[0],
     expiry_date: '',
     certificate_number: '',
+    test_fee_zar: 0,
+    repair_costs_zar: 0,
     result: 'Pass',
     notes: ''
   });
@@ -129,6 +131,8 @@ const FleetCompliance: React.FC = () => {
         test_date: new Date().toISOString().split('T')[0],
         expiry_date: '',
         certificate_number: '',
+        test_fee_zar: 0,
+        repair_costs_zar: 0,
         result: 'Pass',
         notes: ''
       });
@@ -171,6 +175,24 @@ const FleetCompliance: React.FC = () => {
     link.click();
     document.body.removeChild(link);
   };
+
+  const getTotalComplianceCost = useMemo(() => {
+    if (!selectedTruckId) return 0;
+    const truck = trucks.find(t => t.id === selectedTruckId);
+    if (!truck) return 0;
+
+    const currentYear = new Date().getFullYear();
+    
+    // License renewal cost (if renewed this year)
+    const licenseCost = truck.last_renewal_cost_zar || 0;
+
+    // Roadworthy costs for this year
+    const roadworthyCosts = roadworthyHistory
+      .filter(h => h.truck_id === selectedTruckId && new Date(h.test_date).getFullYear() === currentYear)
+      .reduce((sum, h) => sum + (h.test_fee_zar || 0) + (h.repair_costs_zar || 0), 0);
+
+    return licenseCost + roadworthyCosts;
+  }, [selectedTruckId, trucks, roadworthyHistory]);
 
   const filteredDrivers = drivers.filter(d => branchFilter === 'All' || d.branch_id === branchFilter);
   const filteredTrucks = trucks.filter(t => branchFilter === 'All' || t.branch_id === branchFilter);
@@ -338,17 +360,23 @@ const FleetCompliance: React.FC = () => {
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Historical Certificates & Test Results</p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => {
-                  setNewTest({...newTest, truck_id: selectedTruckId});
-                  setIsModalOpen(true);
-                }}
-                className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"
-              >
-                <Plus size={18} /> ADD NEW TEST
-              </button>
-              <button onClick={() => setSelectedTruckId(null)} className="p-3 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Compliance Cost ({new Date().getFullYear()})</p>
+                <p className="text-xl font-black text-slate-900">R {getTotalComplianceCost.toLocaleString()}</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setNewTest({...newTest, truck_id: selectedTruckId});
+                    setIsModalOpen(true);
+                  }}
+                  className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"
+                >
+                  <Plus size={18} /> ADD NEW TEST
+                </button>
+                <button onClick={() => setSelectedTruckId(null)} className="p-3 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+              </div>
             </div>
           </div>
           
@@ -437,6 +465,27 @@ const FleetCompliance: React.FC = () => {
                   onChange={e => setNewTest({...newTest, certificate_number: e.target.value})}
                   placeholder="e.g. RW-123456"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Test Fee (ZAR)</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                    value={newTest.test_fee_zar}
+                    onChange={e => setNewTest({...newTest, test_fee_zar: parseFloat(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Repair Costs (ZAR)</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                    value={newTest.repair_costs_zar}
+                    onChange={e => setNewTest({...newTest, repair_costs_zar: parseFloat(e.target.value) || 0})}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

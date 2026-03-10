@@ -74,6 +74,7 @@ CREATE TABLE public.trucks (
     id TEXT PRIMARY KEY,
     plate_number TEXT NOT NULL UNIQUE,
     license_disc_expiry DATE,
+    last_renewal_cost_zar NUMERIC DEFAULT 0,
     branch_id TEXT REFERENCES public.branches(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -84,6 +85,8 @@ CREATE TABLE public.truck_roadworthy_history (
     test_date DATE NOT NULL,
     expiry_date DATE NOT NULL,
     certificate_number TEXT,
+    test_fee_zar NUMERIC DEFAULT 0,
+    repair_costs_zar NUMERIC DEFAULT 0,
     result TEXT, -- Pass/Fail
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
