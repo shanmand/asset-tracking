@@ -63,6 +63,36 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
   const driver = selectedClaim ? drivers.find(d => d.id === selectedClaim.driver_id) : null;
   const truck = selectedClaim ? trucks.find(t => t.id === selectedClaim.truck_id) : null;
 
+  const handlePauseRental = async () => {
+    if (!selectedClaim || !isSupabaseConfigured) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('batches')
+        .update({ transfer_confirmed_by_customer: true, confirmation_date: new Date().toISOString() })
+        .eq('id', selectedClaim.batch_id);
+      
+      if (error) throw error;
+
+      // Add audit log for the pause
+      await supabase.from('claim_audits').insert([{
+        claim_id: selectedClaim.id,
+        status_from: selectedClaim.status,
+        status_to: 'Under Assessment',
+        notes: 'Rental paused pending dispute investigation.',
+        updated_by: 'System'
+      }]);
+
+      alert("Rental paused for Batch #" + selectedClaim.batch_id);
+      // Refresh data
+      window.location.reload();
+    } catch (err: any) {
+      alert("Error pausing rental: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const workflow: ClaimStatus[] = ['Lodged', 'Under Assessment', 'Returned for Assessment', 'Accepted'];
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -225,15 +255,22 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
                   {auditLogs.length === 0 && <p className="text-xs text-slate-400 italic">No audit history for this claim.</p>}
                 </div>
               </div>
-              
-              {/* Actions */}
+                           {/* Actions */}
               {isManager ? (
-                <div className="mt-8 flex gap-3">
-                  <button className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
-                      <CheckCircle2 size={18} /> Approve Claim (Process Credit)
-                  </button>
-                  <button className="flex-1 py-3 border-2 border-rose-500 text-rose-500 rounded-lg font-bold text-sm hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
-                      <XCircle size={18} /> Reject Claim
+                <div className="mt-8 space-y-3">
+                  <div className="flex gap-3">
+                    <button className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+                        <CheckCircle2 size={18} /> Approve Claim (Process Credit)
+                    </button>
+                    <button className="flex-1 py-3 border-2 border-rose-500 text-rose-500 rounded-lg font-bold text-sm hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
+                        <XCircle size={18} /> Reject Claim
+                    </button>
+                  </div>
+                  <button 
+                    onClick={handlePauseRental}
+                    className="w-full py-3 bg-amber-500 text-white rounded-lg font-bold text-sm hover:bg-amber-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-100"
+                  >
+                    <Clock size={18} /> Pause Daily Rental (Dispute Investigation)
                   </button>
                 </div>
               ) : (

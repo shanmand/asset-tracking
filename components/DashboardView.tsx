@@ -209,29 +209,29 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           <div className="p-8">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredLosses.slice(0, 3).map(loss => {
-                const batch = displayBatches.find(b => b.id === loss.batch_id);
-                const reporter = displayUsers.find(u => u.id === loss.reported_by);
-                const riskLevel = loss.lost_quantity > 20 ? 'CRITICAL' : 'MODERATE';
-                const location = displayLocations.find(l => l.id === loss.last_known_location_id);
+                const batch = displayBatches.find(b => b.id === loss?.batch_id);
+                const reporter = displayUsers.find(u => u.id === loss?.reported_by);
+                const riskLevel = (loss?.lost_quantity || 0) > 20 ? 'CRITICAL' : 'MODERATE';
+                const location = displayLocations.find(l => l.id === loss?.last_known_location_id);
                 
                 return (
-                  <div key={loss.id} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
+                  <div key={loss?.id} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
                     <div className="relative z-10">
                        <div className="flex justify-between items-start mb-4">
                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${riskLevel === 'CRITICAL' ? 'bg-rose-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'}`}>
                             {riskLevel} RISK
                          </span>
-                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">REF: {loss.id}</span>
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">REF: {loss?.id}</span>
                        </div>
                        
-                       <p className="text-sm font-black text-slate-800 leading-tight mb-1">{loss.lost_quantity}x {displayAssets.find(a => a.id === batch?.asset_id)?.name}</p>
+                       <p className="text-sm font-black text-slate-800 leading-tight mb-1">{loss?.lost_quantity}x {displayAssets.find(a => a.id === batch?.asset_id)?.name}</p>
                        <p className="text-[10px] text-slate-400 font-bold mb-4 flex items-center gap-1"><MapPin size={10} /> {location?.name}</p>
-                       <p className="text-xs text-slate-500 line-clamp-2 italic mb-6">"{loss.notes}"</p>
+                       <p className="text-xs text-slate-500 line-clamp-2 italic mb-6">"{loss?.notes}"</p>
 
                        <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                              <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center border-4 border-white shadow-lg group-hover:scale-110 transition-transform">
-                                <span className="text-xs font-black text-white">{reporter?.name.charAt(0) || 'U'}</span>
+                                <span className="text-xs font-black text-white">{reporter?.name?.charAt(0) || 'U'}</span>
                              </div>
                              <div>
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Reporter</p>
@@ -240,7 +240,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                           </div>
                           <div className="text-right">
                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Reported</p>
-                             <p className="text-[10px] font-bold text-slate-700">{new Date(loss.timestamp).toLocaleDateString()}</p>
+                             <p className="text-[10px] font-bold text-slate-700">{loss?.timestamp ? new Date(loss.timestamp).toLocaleDateString() : 'N/A'}</p>
                           </div>
                        </div>
                     </div>
@@ -358,17 +358,17 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           </div>
           <div className="divide-y divide-slate-50 overflow-y-auto max-h-[420px]">
             {filteredBatches.map((batch, i) => {
-              const loc = displayLocations.find(l => l.id === batch.current_location_id);
+              const loc = displayLocations.find(l => l.id === batch?.current_location_id);
               return (
-                <div key={batch.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
+                <div key={batch?.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
                   <div className="flex items-center gap-4">
-                    <div className={`p-2.5 rounded-xl shadow-sm group-hover/row:scale-110 transition-transform ${batch.status === 'In-Transit' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                      {batch.status === 'In-Transit' ? <Truck size={20} /> : <Package size={20} />}
+                    <div className={`p-2.5 rounded-xl shadow-sm group-hover/row:scale-110 transition-transform ${batch?.status === 'In-Transit' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                      {batch?.status === 'In-Transit' ? <Truck size={20} /> : <Package size={20} />}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-black text-slate-800 tracking-tight">#{batch.id}</p>
-                        {batch.status === 'In-Transit' && <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded uppercase tracking-tighter animate-pulse shadow-sm shadow-amber-900/10">In-Transit</span>}
+                        <p className="font-black text-slate-800 tracking-tight">#{batch?.id}</p>
+                        {batch?.status === 'In-Transit' && <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded uppercase tracking-tighter animate-pulse shadow-sm shadow-amber-900/10">In-Transit</span>}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                          <MapPin size={10} className="text-slate-300" />
@@ -377,8 +377,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-black text-slate-800">{batch.quantity} Units</p>
-                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{displayAssets.find(a => a.id === batch.asset_id)?.type}</p>
+                    <p className="text-sm font-black text-slate-800">{batch?.quantity} Units</p>
+                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{displayAssets.find(a => a.id === batch?.asset_id)?.type}</p>
                   </div>
                 </div>
               );

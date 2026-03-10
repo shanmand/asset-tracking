@@ -36,15 +36,29 @@ const LogisticsRegistry: React.FC = () => {
     branch_id: ''
   });
 
+  const [truckPage, setTruckPage] = useState(0);
+  const [driverPage, setDriverPage] = useState(0);
+  const PAGE_SIZE = 50;
+
   const fetchData = async () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
+      // Implement server-side pagination and search
+      let truckQuery = supabase.from('trucks').select('*', { count: 'exact' });
+      let driverQuery = supabase.from('drivers').select('*', { count: 'exact' });
+
+      if (searchQuery) {
+        truckQuery = truckQuery.ilike('plate_number', `%${searchQuery}%`);
+        driverQuery = driverQuery.ilike('full_name', `%${searchQuery}%`);
+      }
+
       const [trucksRes, driversRes, branchesRes] = await Promise.all([
-        supabase.from('trucks').select('*'),
-        supabase.from('drivers').select('*'),
+        truckQuery.range(truckPage * PAGE_SIZE, (truckPage + 1) * PAGE_SIZE - 1),
+        driverQuery.range(driverPage * PAGE_SIZE, (driverPage + 1) * PAGE_SIZE - 1),
         supabase.from('branches').select('*').order('name')
       ]);
+
       if (trucksRes.data) setTrucks(trucksRes.data);
       if (driversRes.data) setDrivers(driversRes.data);
       if (branchesRes.data) setBranches(branchesRes.data);
@@ -57,7 +71,7 @@ const LogisticsRegistry: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [truckPage, driverPage, searchQuery]);
 
   const handleAddTruck = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,13 +246,25 @@ const LogisticsRegistry: React.FC = () => {
           <h3 className="text-2xl font-black text-slate-900 tracking-tight">Logistics Registry</h3>
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Fleet & Driver Management</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => setIsAddingTruck(true)} className="px-6 py-3 bg-slate-100 text-slate-900 rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-200 transition-all">
-            <TruckIcon size={18} /> ADD TRUCK
-          </button>
-          <button onClick={() => setIsAddingDriver(true)} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200">
-            <User size={18} /> ADD DRIVER
-          </button>
+        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:w-64">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Search fleet/drivers..." 
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-slate-900 transition-all"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setIsAddingTruck(true)} className="px-6 py-3 bg-slate-100 text-slate-900 rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-200 transition-all">
+              <TruckIcon size={18} /> ADD TRUCK
+            </button>
+            <button onClick={() => setIsAddingDriver(true)} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200">
+              <User size={18} /> ADD DRIVER
+            </button>
+          </div>
         </div>
       </div>
 

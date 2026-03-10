@@ -35,9 +35,10 @@ const InventoryDashboard: React.FC = () => {
 
       setIsLoading(true);
       try {
+        // Use the view for accurate liability calculation
         const [locsRes, batchesRes, assetsRes, feesRes, branchesRes, thaansRes] = await Promise.all([
           supabase.from('locations').select('*'),
-          supabase.from('batches').select('*'),
+          supabase.from('vw_batch_accruals').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('branches').select('*'),
@@ -45,7 +46,15 @@ const InventoryDashboard: React.FC = () => {
         ]);
 
         if (locsRes.data) setLocations(locsRes.data);
-        if (batchesRes.data) setBatches(batchesRes.data);
+        if (batchesRes.data) {
+          // Map view data back to Batch type or handle it specifically
+          setBatches(batchesRes.data.map((b: any) => ({
+            ...b,
+            id: b.batch_id,
+            // Ensure we have the accrued_amount available
+            accrued_amount: b.accrued_amount
+          })));
+        }
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);
         if (branchesRes.data) setBranches(branchesRes.data);
@@ -78,23 +87,10 @@ const InventoryDashboard: React.FC = () => {
     });
   }, [locations, batches, selectedBranch, selectedAsset, searchQuery, startDate, endDate]);
 
-  // Logic: Calculate accrued costs for batches at locations
+  // Logic: Use the pre-calculated accrued amount from the view
   const calculateAccruedCost = (batchId: string) => {
     const batch = batches.find(b => b.id === batchId);
-    if (!batch) return 0;
-
-    const asset = assets.find(a => a.id === batch.asset_id);
-    if (!asset || asset.ownership_type === 'Internal') return 0;
-
-    const fee = fees.find(f => f.asset_id === batch.asset_id && f.effective_to === null);
-    if (!fee) return 0;
-
-    const thaan = thaanSlips.find(t => t.batch_id === batch.id && t.is_signed);
-    const endDate = thaan ? new Date(thaan.signed_at).getTime() : Date.now();
-    const startDate = new Date(batch.transaction_date || batch.created_at).getTime();
-
-    const days = Math.max(0, Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)));
-    return days * fee.amount_zar * batch.quantity;
+    return (batch as any)?.accrued_amount || 0;
   };
 
   const getInventoryAtLocation = (locationId: string) => {

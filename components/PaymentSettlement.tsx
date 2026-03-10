@@ -57,7 +57,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
       const { data } = await supabase
         .from('business_parties')
         .select('*')
-        .eq('party_type', 'Supplier');
+        .ilike('party_type', 'supplier'); // Case-insensitive filter
       if (data) setSuppliers(data);
       setIsLoading(false);
     };

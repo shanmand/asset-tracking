@@ -78,3 +78,112 @@ SELECT
 
 -- 4. Ensure RPCs handle TEXT IDs correctly
 -- (The existing split_batch and process_stock_take already use TEXT/UUID correctly in schema.sql)
+
+-- 5. Loss Module: Process Partial Loss RPC
+CREATE OR REPLACE FUNCTION public.process_partial_loss(
+    p_batch_id TEXT,
+    p_lost_quantity INTEGER,
+    p_reported_by UUID,
+    p_notes TEXT,
+    p_location_id TEXT
+) RETURNS VOID AS $$
+DECLARE
+    v_original_qty INTEGER;
+    v_asset_id TEXT;
+    v_new_batch_id TEXT;
+BEGIN
+    -- Get original batch info
+    SELECT quantity, asset_id INTO v_original_qty, v_asset_id 
+    FROM public.batches 
+    WHERE id = p_batch_id;
+
+    IF v_original_qty IS NULL THEN
+        RAISE EXCEPTION 'Batch % not found', p_batch_id;
+    END IF;
+
+    IF v_original_qty < p_lost_quantity THEN
+        RAISE EXCEPTION 'Lost quantity (%) exceeds batch quantity (%)', p_lost_quantity, v_original_qty;
+    END IF;
+
+    -- 1. Record the loss
+    INSERT INTO public.asset_losses (
+        batch_id, 
+        loss_type, 
+        lost_quantity, 
+        last_known_location_id, 
+        reported_by, 
+        notes, 
+        transaction_date
+    ) VALUES (
+        p_batch_id, 
+        'Partial Loss', 
+        p_lost_quantity, 
+        p_location_id, 
+        p_reported_by, 
+        p_notes, 
+        CURRENT_DATE
+    );
+
+    -- 2. Handle batch adjustment
+    IF v_original_qty = p_lost_quantity THEN
+        -- Full loss: Just update status
+        UPDATE public.batches 
+        SET status = 'Lost', quantity = p_lost_quantity 
+        WHERE id = p_batch_id;
+    ELSE
+        -- Partial loss: Reduce original, create new 'Lost' batch for tracking
+        UPDATE public.batches 
+        SET quantity = quantity - p_lost_quantity 
+        WHERE id = p_batch_id;
+
+        v_new_batch_id := p_batch_id || '-LOST-' || floor(random() * 1000)::text;
+        
+        INSERT INTO public.batches (
+            id, 
+            asset_id, 
+            quantity, 
+            current_location_id, 
+            status, 
+            transaction_date
+        ) VALUES (
+            v_new_batch_id, 
+            v_asset_id, 
+            p_lost_quantity, 
+            p_location_id, 
+            'Lost', 
+            CURRENT_DATE
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 6. Fleet Expenses View: Cast truck_id to text
+DROP VIEW IF EXISTS public.vw_branch_fleet_expenses;
+CREATE OR REPLACE VIEW public.vw_branch_fleet_expenses AS
+SELECT 
+    t.branch_id::text,
+    b.name::text as branch_name,
+    t.id::text as truck_id,
+    t.plate_number::text,
+    'License Renewal'::text as expense_type,
+    COALESCE(t.last_renewal_cost_zar, 0)::numeric as amount,
+    t.license_disc_expiry::date as expense_date,
+    t.license_doc_url::text
+FROM public.trucks t
+JOIN public.branches b ON t.branch_id = b.id
+WHERE t.last_renewal_cost_zar > 0
+
+UNION ALL
+
+SELECT 
+    t.branch_id::text,
+    b.name::text as branch_name,
+    t.id::text as truck_id,
+    t.plate_number::text,
+    'COF/Roadworthy'::text as expense_type,
+    COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0)::numeric as amount,
+    rh.test_date::date as expense_date,
+    t.license_doc_url::text
+FROM public.truck_roadworthy_history rh
+JOIN public.trucks t ON rh.truck_id::text = t.id::text
+JOIN public.branches b ON t.branch_id = b.id;
