@@ -30,7 +30,8 @@ import {
   Gavel,
   Tags,
   ArrowDownToLine,
-  Clock
+  Clock,
+  Smartphone
 } from 'lucide-react';
 import { UserProvider, useUser } from './UserContext';
 import DashboardView from './components/DashboardView';
@@ -58,6 +59,8 @@ import LiabilityHeatmap from './components/LiabilityHeatmap';
 import PersonnelManagement from './components/PersonnelManagement';
 import ShiftManagement from './components/ShiftManagement';
 import FleetCompliance from './components/FleetCompliance';
+import FleetExpenseReport from './components/FleetExpenseReport';
+import DriverPortal from './components/DriverPortal';
 import { useBranches } from './useBranches';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
@@ -87,7 +90,9 @@ enum NavItem {
   LIABILITY_HEATMAP = 'liability-heatmap',
   PERSONNEL = 'personnel',
   SHIFTS = 'shifts',
-  COMPLIANCE = 'compliance'
+  COMPLIANCE = 'compliance',
+  FLEET_REPORT = 'fleet-report',
+  DRIVER_PORTAL = 'driver-portal'
 }
 
 const AppContent: React.FC = () => {
@@ -140,6 +145,8 @@ const AppContent: React.FC = () => {
       case NavItem.PERSONNEL: return <PersonnelManagement />;
       case NavItem.SHIFTS: return <ShiftManagement />;
       case NavItem.COMPLIANCE: return <FleetCompliance />;
+      case NavItem.FLEET_REPORT: return <FleetExpenseReport />;
+      case NavItem.DRIVER_PORTAL: return <DriverPortal />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -168,6 +175,8 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.STOCK_TAKE} onClick={() => setActiveTab(NavItem.STOCK_TAKE)} icon={<ClipboardCheck size={18} />} label="Stock Take" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Financials</div>
+          <SidebarButton active={activeTab === NavItem.FLEET_REPORT} onClick={() => setActiveTab(NavItem.FLEET_REPORT)} icon={<BarChart3 size={18} />} label="Fleet Expense Report" />
+          <SidebarButton active={activeTab === NavItem.DRIVER_PORTAL} onClick={() => setActiveTab(NavItem.DRIVER_PORTAL)} icon={<Smartphone size={18} />} label="Driver Portal (Mobile)" />
           <SidebarButton active={activeTab === NavItem.FINANCIALS} onClick={() => setActiveTab(NavItem.FINANCIALS)} icon={<BarChart3 size={18} />} label="Accrual Engine" />
           <SidebarButton active={activeTab === NavItem.SETTLEMENT} onClick={() => setActiveTab(NavItem.SETTLEMENT)} icon={<Receipt size={18} />} label="Settlement Audit" />
           <SidebarButton active={activeTab === NavItem.PAYMENT_SETTLEMENT} onClick={() => setActiveTab(NavItem.PAYMENT_SETTLEMENT)} icon={<DollarSign size={18} />} label="Payment Settlement" />

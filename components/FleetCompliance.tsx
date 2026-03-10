@@ -17,13 +17,17 @@ import {
   Loader2,
   FileText,
   ChevronRight,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  Paperclip
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
-import { Truck, Driver, Branch, TruckRoadworthyHistory } from '../types';
+import { supabase, isSupabaseConfigured, getSignedFleetDocumentUrl } from '../supabase';
+import { Truck, Driver, Branch, TruckRoadworthyHistory, UserRole } from '../types';
 import BranchSelector from './BranchSelector';
+import { useUser } from '../UserContext';
 
 const FleetCompliance: React.FC = () => {
+  const { profile } = useUser();
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -106,7 +110,10 @@ const FleetCompliance: React.FC = () => {
     };
 
     filteredTrucks.forEach(t => checkCompliance(t.license_disc_expiry));
-    filteredDrivers.forEach(d => checkCompliance(d.license_expiry));
+    filteredDrivers.forEach(d => {
+      checkCompliance(d.license_expiry);
+      checkCompliance(d.prdp_expiry);
+    });
 
     return { critical, warning, compliant };
   }, [trucks, drivers, branchFilter]);
@@ -194,6 +201,23 @@ const FleetCompliance: React.FC = () => {
     return licenseCost + roadworthyCosts;
   }, [selectedTruckId, trucks, roadworthyHistory]);
 
+  const handleViewDocument = async (path: string, type: 'truck' | 'driver') => {
+    if (type === 'driver') {
+      const isAuthorized = profile?.role_name === UserRole.ADMIN || profile?.role_name === UserRole.MANAGER;
+      if (!isAuthorized) {
+        alert("POPIA Compliance: Only Managers and Admins can view driver license documents.");
+        return;
+      }
+    }
+
+    try {
+      const url = await getSignedFleetDocumentUrl(path);
+      window.open(url, '_blank');
+    } catch (err: any) {
+      alert("Error generating document link: " + err.message);
+    }
+  };
+
   const filteredDrivers = drivers.filter(d => branchFilter === 'All' || d.branch_id === branchFilter);
   const filteredTrucks = trucks.filter(t => branchFilter === 'All' || t.branch_id === branchFilter);
 
@@ -275,7 +299,7 @@ const FleetCompliance: React.FC = () => {
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Driver</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">License #</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Expiry Date</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Expiries</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -289,9 +313,30 @@ const FleetCompliance: React.FC = () => {
                       <p className="text-xs font-bold text-slate-600">{driver.license_number || 'NOT RECORDED'}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${getStatusColor(driver.license_expiry)}`}>
-                        <Calendar size={12} />
-                        {driver.license_expiry || 'NO DATE'}
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[8px] font-black text-slate-400 uppercase w-12">License:</span>
+                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${getStatusColor(driver.license_expiry)}`}>
+                            <Calendar size={12} />
+                            {driver.license_expiry || 'NO DATE'}
+                          </div>
+                          {driver.license_doc_url && (
+                            <button 
+                              onClick={() => handleViewDocument(driver.license_doc_url!, 'driver')}
+                              className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors"
+                              title="View License Document"
+                            >
+                              <Paperclip size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[8px] font-black text-slate-400 uppercase w-12">PrDP:</span>
+                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${getStatusColor(driver.prdp_expiry)}`}>
+                            <ShieldCheck size={12} />
+                            {driver.prdp_expiry || 'NO DATE'}
+                          </div>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -326,9 +371,20 @@ const FleetCompliance: React.FC = () => {
                       <p className="text-[10px] text-slate-400 font-bold uppercase">{branches.find(b => b.id === truck.branch_id)?.name || 'N/A'}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${getStatusColor(truck.license_disc_expiry)}`}>
-                        <Calendar size={12} />
-                        {truck.license_disc_expiry || 'NO DATE'}
+                      <div className="flex items-center gap-2">
+                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${getStatusColor(truck.license_disc_expiry)}`}>
+                          <Calendar size={12} />
+                          {truck.license_disc_expiry || 'NO DATE'}
+                        </div>
+                        {truck.license_doc_url && (
+                          <button 
+                            onClick={() => handleViewDocument(truck.license_doc_url!, 'truck')}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors"
+                            title="View License Disc"
+                          >
+                            <Paperclip size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">

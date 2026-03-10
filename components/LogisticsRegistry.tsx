@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin, Edit2, X, Loader2 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin, Edit2, X, Loader2, Paperclip, Eye } from 'lucide-react';
+import { supabase, isSupabaseConfigured, uploadFleetDocument, getSignedFleetDocumentUrl } from '../supabase';
 import { Truck, Driver, Branch } from '../types';
 import BranchSelector from './BranchSelector';
 
@@ -14,6 +14,7 @@ const LogisticsRegistry: React.FC = () => {
   const [isAddingDriver, setIsAddingDriver] = useState(false);
   const [editingTruck, setEditingTruck] = useState<Truck | null>(null);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -31,6 +32,7 @@ const LogisticsRegistry: React.FC = () => {
     contact_number: '',
     license_number: '',
     license_expiry: '',
+    prdp_expiry: '',
     branch_id: ''
   });
 
@@ -85,13 +87,57 @@ const LogisticsRegistry: React.FC = () => {
       if (error) throw error;
       setNotification({ msg: `Driver ${newDriver.full_name} registered`, type: 'success' });
       setIsAddingDriver(false);
-      setNewDriver({ id: '', full_name: '', contact_number: '', license_number: '', license_expiry: '', branch_id: '' });
+      setNewDriver({ id: '', full_name: '', contact_number: '', license_number: '', license_expiry: '', prdp_expiry: '', branch_id: '' });
       fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to register driver", type: 'error' });
     } finally {
       setIsLoading(false);
       setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'truck' | 'driver') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const entity = type === 'truck' ? editingTruck : editingDriver;
+    if (!entity) return;
+
+    setIsUploading(true);
+    try {
+      const fileName = type === 'truck' ? 'license_disc' : 'driver_license';
+      const path = await uploadFleetDocument(file, entity.branch_id || 'unassigned', entity.id, fileName);
+      
+      const { error } = await supabase
+        .from(type === 'truck' ? 'trucks' : 'drivers')
+        .update({ license_doc_url: path })
+        .eq('id', entity.id);
+
+      if (error) throw error;
+
+      if (type === 'truck') {
+        setEditingTruck({ ...editingTruck!, license_doc_url: path });
+      } else {
+        setEditingDriver({ ...editingDriver!, license_doc_url: path });
+      }
+
+      setNotification({ msg: "Document uploaded successfully", type: 'success' });
+      fetchData();
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Upload failed", type: 'error' });
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleViewDocument = async (path: string) => {
+    try {
+      const url = await getSignedFleetDocumentUrl(path);
+      window.open(url, '_blank');
+    } catch (err: any) {
+      alert("Error generating document link: " + err.message);
     }
   };
 
@@ -133,6 +179,7 @@ const LogisticsRegistry: React.FC = () => {
           contact_number: editingDriver.contact_number,
           license_number: editingDriver.license_number,
           license_expiry: editingDriver.license_expiry,
+          prdp_expiry: editingDriver.prdp_expiry,
           branch_id: editingDriver.branch_id
         })
         .eq('id', editingDriver.id);
@@ -287,6 +334,15 @@ const LogisticsRegistry: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PrDP Expiry</label>
+              <input 
+                type="date"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={newDriver.prdp_expiry}
+                onChange={e => setNewDriver({...newDriver, prdp_expiry: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignment</label>
               <BranchSelector 
                 value={newDriver.branch_id}
@@ -411,6 +467,26 @@ const LogisticsRegistry: React.FC = () => {
                   onChange={val => setEditingTruck({...editingTruck, branch_id: val})}
                 />
               </div>
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">License Document (PDF/Image)</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex-1 flex items-center justify-center gap-2 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-slate-900 transition-all">
+                    {isUploading ? <Loader2 className="animate-spin text-slate-400" size={20} /> : <Paperclip className="text-slate-400" size={20} />}
+                    <span className="text-xs font-bold text-slate-500">{editingTruck.license_doc_url ? 'Update Document' : 'Upload License Disc'}</span>
+                    <input type="file" className="hidden" accept="image/*,.pdf" onChange={e => handleFileUpload(e, 'truck')} disabled={isUploading} />
+                  </label>
+                  {editingTruck.license_doc_url && (
+                    <button 
+                      type="button"
+                      onClick={() => handleViewDocument(editingTruck.license_doc_url!)}
+                      className="p-4 bg-slate-100 text-slate-900 rounded-xl hover:bg-slate-200 transition-all"
+                      title="View Current Document"
+                    >
+                      <Eye size={20} />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="md:col-span-2 pt-4">
                 <button 
                   type="submit" 
@@ -472,11 +548,40 @@ const LogisticsRegistry: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PrDP Expiry</label>
+                <input 
+                  type="date"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editingDriver.prdp_expiry || ''}
+                  onChange={e => setEditingDriver({...editingDriver, prdp_expiry: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignment</label>
                 <BranchSelector 
                   value={editingDriver.branch_id}
                   onChange={val => setEditingDriver({...editingDriver, branch_id: val})}
                 />
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Driver License Document (PDF/Image)</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex-1 flex items-center justify-center gap-2 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-slate-900 transition-all">
+                    {isUploading ? <Loader2 className="animate-spin text-slate-400" size={20} /> : <Paperclip className="text-slate-400" size={20} />}
+                    <span className="text-xs font-bold text-slate-500">{editingDriver.license_doc_url ? 'Update Document' : 'Upload License'}</span>
+                    <input type="file" className="hidden" accept="image/*,.pdf" onChange={e => handleFileUpload(e, 'driver')} disabled={isUploading} />
+                  </label>
+                  {editingDriver.license_doc_url && (
+                    <button 
+                      type="button"
+                      onClick={() => handleViewDocument(editingDriver.license_doc_url!)}
+                      className="p-4 bg-slate-100 text-slate-900 rounded-xl hover:bg-slate-200 transition-all"
+                      title="View Current Document"
+                    >
+                      <Eye size={20} />
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="md:col-span-2 pt-4">
                 <button 

@@ -128,6 +128,7 @@ export interface Truck {
   capacity?: number;
   license_disc_expiry?: string;
   last_renewal_cost_zar?: number;
+  license_doc_url?: string;
   branch_id?: string;
   created_at?: string;
 }
@@ -150,10 +151,40 @@ export interface Driver {
   full_name: string;
   license_number?: string;
   license_expiry?: string;
+  prdp_expiry?: string;
+  license_doc_url?: string;
   phone?: string;
   contact_number?: string;
   branch_id?: string;
   is_active?: boolean;
+  created_at?: string;
+}
+
+export interface FleetExpense {
+  branch_id: string;
+  branch_name: string;
+  truck_id: string;
+  plate_number: string;
+  expense_type: string;
+  amount: number;
+  expense_date: string;
+  license_doc_url?: string;
+}
+
+export interface Inspection {
+  id?: string;
+  driver_id: string;
+  truck_id: string;
+  odometer_reading: number;
+  odometer_photo_url?: string;
+  tyres_ok: boolean;
+  lights_ok: boolean;
+  brakes_ok: boolean;
+  fluids_ok: boolean;
+  fault_notes?: string;
+  fault_photo_url?: string;
+  latitude?: number;
+  longitude?: number;
   created_at?: string;
 }
 

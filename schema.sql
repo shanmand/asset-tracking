@@ -98,9 +98,27 @@ CREATE TABLE public.drivers (
     contact_number TEXT,
     license_number TEXT,
     license_expiry DATE,
+    prdp_expiry DATE,
     branch_id TEXT REFERENCES public.branches(id),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.inspections (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    driver_id TEXT REFERENCES public.drivers(id),
+    truck_id TEXT REFERENCES public.trucks(id),
+    odometer_reading INTEGER NOT NULL,
+    odometer_photo_url TEXT,
+    tyres_ok BOOLEAN DEFAULT TRUE,
+    lights_ok BOOLEAN DEFAULT TRUE,
+    brakes_ok BOOLEAN DEFAULT TRUE,
+    fluids_ok BOOLEAN DEFAULT TRUE,
+    fault_notes TEXT,
+    fault_photo_url TEXT,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 CREATE TABLE public.driver_shifts (
@@ -660,8 +678,37 @@ SELECT
     branch_id,
     is_active
 FROM public.drivers;
-('SH-001', 'Daily Rental (Supermarket)', 5.50, '2026-01-01'),
-('SH-001', 'Replacement Fee (Lost Equipment)', 450.00, '2026-01-01'),
-('SH-P01', 'Daily Rental (Supermarket)', 12.00, '2026-01-01'),
+
+-- 17. Fleet Expenses View
+CREATE OR REPLACE VIEW public.vw_branch_fleet_expenses AS
+-- License Renewal Expenses
+SELECT 
+    t.branch_id,
+    b.name as branch_name,
+    t.id as truck_id,
+    t.plate_number,
+    'License Renewal' as expense_type,
+    COALESCE(t.last_renewal_cost_zar, 0) as amount,
+    t.license_disc_expiry as expense_date,
+    t.license_doc_url
+FROM public.trucks t
+JOIN public.branches b ON t.branch_id = b.id
+WHERE t.last_renewal_cost_zar > 0
+
+UNION ALL
+
+-- Roadworthy/COF Expenses
+SELECT 
+    t.branch_id,
+    b.name as branch_name,
+    t.id as truck_id,
+    t.plate_number,
+    'COF/Roadworthy' as expense_type,
+    COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0) as amount,
+    rh.test_date as expense_date,
+    t.license_doc_url
+FROM public.truck_roadworthy_history rh
+JOIN public.trucks t ON rh.truck_id = t.id
+JOIN public.branches b ON t.branch_id = b.id;
 ('SH-P01', 'Replacement Fee (Lost Equipment)', 1200.00, '2026-01-01')
 ON CONFLICT DO NOTHING;
