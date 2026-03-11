@@ -187,3 +187,22 @@ SELECT
 FROM public.truck_roadworthy_history rh
 JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
+
+-- 7. Liability Heatmap View
+DROP VIEW IF EXISTS public.vw_daily_burn_rate;
+CREATE OR REPLACE VIEW public.vw_daily_burn_rate AS
+SELECT 
+    br.name AS branch_name, 
+    l.name AS location_name, 
+    l.id AS location_id, 
+    br.id AS branch_id, 
+    SUM(bt.quantity * fs.amount_zar) AS daily_burn_rate, 
+    COUNT(bt.id) AS batch_count, 
+    AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - bt.transaction_date))/86400) AS avg_duration_days
+FROM public.batches bt 
+JOIN public.locations l ON bt.current_location_id = l.id 
+JOIN public.branches br ON l.branch_id = br.id 
+JOIN public.fee_schedule fs ON bt.asset_id = fs.asset_id
+WHERE bt.transfer_confirmed_by_customer = FALSE 
+  AND fs.effective_to IS NULL
+GROUP BY br.name, l.name, l.id, br.id;

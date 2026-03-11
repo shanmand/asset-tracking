@@ -49,7 +49,10 @@ const ReportsView: React.FC = () => {
           supabase.from('locations').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('branches').select('*'),
-          supabase.from('vw_master_logistics_trace').select('*')
+          supabase.from('vw_master_logistics_trace')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(1000)
         ]);
 
         if (bRes.data) setBatches(bRes.data);
@@ -107,23 +110,23 @@ const ReportsView: React.FC = () => {
     // Trace Stats
     const traceData = traces.filter(t => selectedBranch === 'all' || t.custodian_branch_id === selectedBranch);
     
-    // Get latest condition for each batch at each location
-    const latestTraceByBatch = traceData.reduce((acc: Record<string, LogisticsTrace>, t: LogisticsTrace) => {
-      if (!acc[t.batch_id] || new Date(t.timestamp).getTime() > new Date(acc[t.batch_id].timestamp).getTime()) {
-        acc[t.batch_id] = t;
+    // Get latest condition for each batch at each location - Optimized
+    const latestTraceByBatch: Record<string, LogisticsTrace> = {};
+    for (const t of traceData) {
+      if (!latestTraceByBatch[t.batch_id] || new Date(t.timestamp).getTime() > new Date(latestTraceByBatch[t.batch_id].timestamp).getTime()) {
+        latestTraceByBatch[t.batch_id] = t;
       }
-      return acc;
-    }, {});
+    }
 
-    const conditionSummary = Object.values(latestTraceByBatch).reduce((acc: Record<string, { clean: number, dirty: number, damaged: number }>, t: LogisticsTrace) => {
-      if (!acc[t.to_location_name]) {
-        acc[t.to_location_name] = { clean: 0, dirty: 0, damaged: 0 };
+    const conditionSummary: Record<string, { clean: number, dirty: number, damaged: number }> = {};
+    for (const t of Object.values(latestTraceByBatch)) {
+      if (!conditionSummary[t.to_location_name]) {
+        conditionSummary[t.to_location_name] = { clean: 0, dirty: 0, damaged: 0 };
       }
-      if (t.condition === 'Clean') acc[t.to_location_name].clean += t.quantity;
-      else if (t.condition === 'Dirty') acc[t.to_location_name].dirty += t.quantity;
-      else if (t.condition === 'Damaged') acc[t.to_location_name].damaged += t.quantity;
-      return acc;
-    }, {});
+      if (t.condition === 'Clean') conditionSummary[t.to_location_name].clean += t.quantity;
+      else if (t.condition === 'Dirty') conditionSummary[t.to_location_name].dirty += t.quantity;
+      else if (t.condition === 'Damaged') conditionSummary[t.to_location_name].damaged += t.quantity;
+    }
 
     return { totalUnits, byLocation, byAsset, conditionSummary };
   }, [filteredData, locations, assets, traces, selectedBranch]);

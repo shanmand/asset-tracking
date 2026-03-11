@@ -577,9 +577,20 @@ LEFT JOIN public.trucks t ON bm.truck_id = t.id;
 
 DROP VIEW IF EXISTS public.vw_daily_burn_rate;
 CREATE OR REPLACE VIEW public.vw_daily_burn_rate AS
-SELECT br.name AS branch_name, l.name AS location_name, l.id AS location_id, br.id AS branch_id, SUM(bt.quantity * fs.amount_zar) AS daily_burn_rate, COUNT(bt.id) AS batch_count, AVG(CURRENT_DATE - bt.transaction_date) AS avg_duration_days
-FROM public.batches bt JOIN public.asset_master a ON bt.asset_id = a.id JOIN public.locations l ON bt.current_location_id = l.id JOIN public.branches br ON l.branch_id = br.id JOIN public.fee_schedule fs ON a.id = fs.asset_id
-WHERE bt.transfer_confirmed_by_customer = FALSE AND a.ownership_type = 'External' AND fs.fee_type = 'Daily Rental (Supermarket)' AND fs.effective_to IS NULL
+SELECT 
+    br.name AS branch_name, 
+    l.name AS location_name, 
+    l.id AS location_id, 
+    br.id AS branch_id, 
+    SUM(bt.quantity * fs.amount_zar) AS daily_burn_rate, 
+    COUNT(bt.id) AS batch_count, 
+    AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - bt.transaction_date))/86400) AS avg_duration_days
+FROM public.batches bt 
+JOIN public.locations l ON bt.current_location_id = l.id 
+JOIN public.branches br ON l.branch_id = br.id 
+JOIN public.fee_schedule fs ON bt.asset_id = fs.asset_id
+WHERE bt.transfer_confirmed_by_customer = FALSE 
+  AND fs.effective_to IS NULL
 GROUP BY br.name, l.name, l.id, br.id;
 
 -- 6. RLS POLICIES
@@ -684,14 +695,14 @@ FROM public.drivers;
 CREATE OR REPLACE VIEW public.vw_branch_fleet_expenses AS
 -- License Renewal Expenses
 SELECT 
-    t.branch_id,
-    b.name as branch_name,
-    t.id as truck_id,
-    t.plate_number,
-    'License Renewal' as expense_type,
-    COALESCE(t.last_renewal_cost_zar, 0) as amount,
-    t.license_disc_expiry as expense_date,
-    t.license_doc_url
+    t.branch_id::text,
+    b.name::text as branch_name,
+    t.id::text as truck_id,
+    t.plate_number::text,
+    'License Renewal'::text as expense_type,
+    COALESCE(t.last_renewal_cost_zar, 0)::numeric as amount,
+    t.license_disc_expiry::date as expense_date,
+    t.license_doc_url::text
 FROM public.trucks t
 JOIN public.branches b ON t.branch_id = b.id
 WHERE t.last_renewal_cost_zar > 0
@@ -700,16 +711,16 @@ UNION ALL
 
 -- Roadworthy/COF Expenses
 SELECT 
-    t.branch_id,
-    b.name as branch_name,
-    t.id as truck_id,
-    t.plate_number,
-    'COF/Roadworthy' as expense_type,
-    COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0) as amount,
-    rh.test_date as expense_date,
-    t.license_doc_url
+    t.branch_id::text,
+    b.name::text as branch_name,
+    t.id::text as truck_id,
+    t.plate_number::text,
+    'COF/Roadworthy'::text as expense_type,
+    COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0)::numeric as amount,
+    rh.test_date::date as expense_date,
+    t.license_doc_url::text
 FROM public.truck_roadworthy_history rh
-JOIN public.trucks t ON rh.truck_id = t.id
+JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
 -- 18. Management Reporting Views
