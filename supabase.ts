@@ -32,7 +32,12 @@ export const uploadFleetDocument = async (
   fileName: string
 ) => {
   const fileExt = file.name.split('.').pop();
-  const filePath = `${branchId}/${entityId}/${fileName}.${fileExt}`;
+  // Sanitize path: remove spaces and special characters from branchId, entityId, and fileName
+  const cleanBranchId = branchId.replace(/[^a-z0-9]/gi, '_');
+  const cleanEntityId = entityId.replace(/[^a-z0-9]/gi, '_');
+  const cleanFileName = fileName.replace(/[^a-z0-9]/gi, '_');
+  
+  const filePath = `${cleanBranchId}/${cleanEntityId}/${cleanFileName}.${fileExt}`;
 
   const { data, error } = await supabase.storage
     .from('fleet-documents')
@@ -42,10 +47,6 @@ export const uploadFleetDocument = async (
     });
 
   if (error) throw error;
-
-  // Get public URL or just return the path to be used for signed URL later
-  // The user asked to save the URL, but since it's a private bucket, 
-  // we'll save the path and generate signed URLs on the fly.
   return data.path;
 };
 

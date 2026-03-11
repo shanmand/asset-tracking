@@ -128,12 +128,22 @@ const DriverPortal: React.FC = () => {
       
       let odometerPhotoUrl = '';
       if (odometerPhoto) {
-        odometerPhotoUrl = await uploadFleetDocument(odometerPhoto, driver.branch_id || 'mobile', selectedTruckId, `odo_${Date.now()}`);
+        try {
+          odometerPhotoUrl = await uploadFleetDocument(odometerPhoto, driver.branch_id || 'mobile', selectedTruckId, `odo_${Date.now()}`);
+        } catch (uploadErr) {
+          console.error("Odometer photo upload failed:", uploadErr);
+          // Continue without photo
+        }
       }
 
       let faultPhotoUrl = '';
       if (faultPhoto) {
-        faultPhotoUrl = await uploadFleetDocument(faultPhoto, driver.branch_id || 'mobile', selectedTruckId, `fault_${Date.now()}`);
+        try {
+          faultPhotoUrl = await uploadFleetDocument(faultPhoto, driver.branch_id || 'mobile', selectedTruckId, `fault_${Date.now()}`);
+        } catch (uploadErr) {
+          console.error("Fault photo upload failed:", uploadErr);
+          // Continue without photo
+        }
       }
 
       // Automatic Grounding: If any of the safety checkboxes (Tyres, Brakes, Lights) are false, set is_grounded to true
@@ -211,7 +221,14 @@ const DriverPortal: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const path = await uploadFleetDocument(file, driver.branch_id || 'mobile', driver.id, 'driver_license_renewal');
+      let path = '';
+      try {
+        path = await uploadFleetDocument(file, driver.branch_id || 'mobile', driver.id, 'driver_license_renewal');
+      } catch (uploadErr) {
+        console.error("License photo upload failed:", uploadErr);
+        throw new Error("Failed to upload license photo. Please try again.");
+      }
+      
       const { error } = await supabase
         .from('drivers')
         .update({ license_doc_url: path })
