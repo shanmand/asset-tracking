@@ -107,7 +107,7 @@ CREATE TABLE public.drivers (
 CREATE TABLE public.vehicle_inspections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     truck_id TEXT NOT NULL, -- References your 'trucks' table
-    driver_id UUID DEFAULT auth.uid(), -- Automatically tags the logged-in driver
+    driver_id TEXT, -- References your 'drivers' table (custom IDs like DRV-7333)
     inspection_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     odometer_reading INT,
     

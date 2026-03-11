@@ -121,7 +121,11 @@ const DriverPortal: React.FC = () => {
   };
 
   const handleInspectionSubmit = async () => {
-    if (!driver || !selectedTruckId || !odometer) return;
+    if (!driver || !driver.id) {
+      alert('Please ensure your Driver Profile is loaded correctly.');
+      return;
+    }
+    if (!selectedTruckId || !odometer) return;
     setIsLoading(true);
     try {
       const location = await getCurrentLocation();
@@ -150,8 +154,8 @@ const DriverPortal: React.FC = () => {
       const isGrounded = !checklist.tyres || !checklist.brakes || !checklist.lights;
 
       const inspectionData: Inspection = {
-        driver_id: driver.id,
-        truck_id: selectedTruckId,
+        driver_id: String(driver.id),
+        truck_id: String(selectedTruckId),
         odometer_reading: parseInt(odometer),
         odometer_photo_url: odometerPhotoUrl,
         tyres_ok: checklist.tyres,
@@ -167,8 +171,10 @@ const DriverPortal: React.FC = () => {
         longitude: location?.lng
       };
 
-      const { error } = await supabase.from('vehicle_inspections').insert([inspectionData]);
-      if (error) throw error;
+      const response = await supabase.from('vehicle_inspections').insert([inspectionData]);
+      console.log("Submission Status:", response.status);
+      
+      if (response.error) throw response.error;
 
       setNotification({ msg: "Report Submitted Successfully", type: 'success' });
       setView('home');
