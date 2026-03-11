@@ -249,3 +249,40 @@ ON public.vehicle_inspections
 FOR SELECT 
 TO authenticated 
 USING (true);
+
+-- Fleet Readiness View
+CREATE OR REPLACE VIEW public.vw_fleet_readiness AS
+SELECT 
+    t.id as truck_id,
+    t.plate_number,
+    t.branch_id,
+    b.name as branch_name,
+    t.license_disc_expiry,
+    CASE 
+        WHEN t.license_disc_expiry < CURRENT_DATE THEN 'Expired'
+        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
+        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '90 days' THEN 'Warning'
+        ELSE 'Compliant'
+    END as license_status,
+    COALESCE(t.last_renewal_cost_zar, 0) as last_renewal_cost,
+    (
+        SELECT COALESCE(SUM(test_fee_zar + repair_costs_zar), 0)
+        FROM public.truck_roadworthy_history
+        WHERE truck_id = t.id AND test_date >= DATE_TRUNC('year', CURRENT_DATE)
+    ) as ytd_roadworthy_costs,
+    (
+        SELECT result
+        FROM public.truck_roadworthy_history
+        WHERE truck_id = t.id
+        ORDER BY test_date DESC
+        LIMIT 1
+    ) as last_roadworthy_result,
+    (
+        SELECT expiry_date
+        FROM public.truck_roadworthy_history
+        WHERE truck_id = t.id
+        ORDER BY test_date DESC
+        LIMIT 1
+    ) as roadworthy_expiry
+FROM public.trucks t
+LEFT JOIN public.branches b ON t.branch_id = b.id;

@@ -33,13 +33,13 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
       }
       setIsLoading(true);
       try {
-        const [locsRes, assetsRes, feesRes, settlementsRes] = await Promise.all([
-          supabase.from('locations').select('*').eq('partner_type', 'Supplier').order('name'),
+        const [partiesRes, assetsRes, feesRes, settlementsRes] = await Promise.all([
+          supabase.from('business_parties').select('*').eq('party_type', 'Supplier').order('name'),
           supabase.from('asset_master').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('settlements').select('*').order('created_at', { ascending: false })
         ]);
-        if (locsRes.data) setSuppliers(locsRes.data);
+        if (partiesRes.data) setSuppliers(partiesRes.data as any);
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);
         if (settlementsRes.data) setSettlements(settlementsRes.data);
@@ -58,33 +58,33 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
         setBatches([]);
         return;
       }
-      // Fetch batches owned by this supplier that are NOT settled
+      // Fetch batches from the master view for this supplier
       const { data } = await supabase
-        .from('batches')
-        .select(`
-          *,
-          asset_master!inner(*)
-        `)
-        .eq('asset_master.supplier_id', selectedSupplier)
+        .from('vw_global_inventory_tracker')
+        .select('*')
+        .eq('supplier_id', selectedSupplier)
         .eq('is_settled', false);
       
-      if (data) setBatches(data);
+      if (data) {
+        // Map view columns to Batch type
+        const mapped = data.map((item: any) => ({
+          id: item.batch_id,
+          asset_id: item.asset_id,
+          quantity: item.quantity,
+          transaction_date: item.transaction_date,
+          daily_rental_fee: item.daily_rental_fee,
+          daily_accrued_liability: item.daily_accrued_liability,
+          created_at: item.transaction_date
+        }));
+        setBatches(mapped as any);
+      }
     };
     fetchBatches();
   }, [selectedSupplier]);
 
-  const calculateLiability = (batch: Batch) => {
-    const asset = assets.find(a => a.id === batch.asset_id);
-    if (!asset || asset.ownership_type === 'Internal') return 0;
-
-    const fee = fees.find(f => f.asset_id === batch.asset_id && f.effective_to === null);
-    if (!fee) return 0;
-
-    const end = new Date(endDate).getTime();
-    const start = new Date(batch.transaction_date || batch.created_at).getTime();
-    const days = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
-    
-    return days * fee.amount_zar * batch.quantity;
+  const calculateLiability = (batch: any) => {
+    // Use the accrued liability from the view
+    return batch.daily_accrued_liability || 0;
   };
 
   const totalGrossLiability = useMemo(() => {

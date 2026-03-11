@@ -12,17 +12,20 @@ interface ClaimsManagerProps {
 const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [disputedBatches, setDisputedBatches] = useState<any[]>([]);
   const [audits, setAudits] = useState<ClaimAudit[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClaimId, setSelectedClaimId] = useState<string>('');
+  const [activeView, setActiveView] = useState<'claims' | 'disputed'>('claims');
 
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured) {
         setClaims([]);
         setBatches([]);
+        setDisputedBatches([]);
         setAudits([]);
         setTrucks([]);
         setDrivers([]);
@@ -32,12 +35,13 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
 
       setIsLoading(true);
       try {
-        const [cRes, bRes, aRes, tRes, dRes] = await Promise.all([
+        const [cRes, bRes, aRes, tRes, dRes, dbRes] = await Promise.all([
           supabase.from('claims').select('*'),
           supabase.from('batches').select('*'),
           supabase.from('claim_audits').select('*'),
           supabase.from('trucks').select('*'),
-          supabase.from('drivers').select('*')
+          supabase.from('drivers').select('*'),
+          supabase.from('vw_global_inventory_tracker').select('*').eq('batch_status', 'Disputed')
         ]);
 
         if (cRes.data) {
@@ -48,6 +52,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         if (aRes.data) setAudits(aRes.data);
         if (tRes.data) setTrucks(tRes.data);
         if (dRes.data) setDrivers(dRes.data);
+        if (dbRes.data) setDisputedBatches(dbRes.data);
       } catch (err) {
         console.error("Claims Fetch Error:", err);
       } finally {
@@ -57,6 +62,25 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
 
     fetchData();
   }, []);
+
+  const handleResolveDispute = async (batchId: string) => {
+    if (!isSupabaseConfigured) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('batches')
+        .update({ status: 'Confirmed' }) // Assuming 'Confirmed' resolves the dispute
+        .eq('id', batchId);
+      
+      if (error) throw error;
+      alert(`Batch #${batchId} dispute resolved.`);
+      window.location.reload();
+    } catch (err: any) {
+      alert("Error resolving dispute: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const selectedClaim = claims.find(c => c.id === selectedClaimId);
   const auditLogs = audits.filter(a => a.claim_id === selectedClaimId);
@@ -163,7 +187,68 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="flex gap-4 border-b border-slate-200 mb-6">
+        <button 
+          onClick={() => setActiveView('claims')}
+          className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all ${activeView === 'claims' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Active Claims ({claims.length})
+        </button>
+        <button 
+          onClick={() => setActiveView('disputed')}
+          className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all ${activeView === 'disputed' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Disputed Batches ({disputedBatches.length})
+        </button>
+      </div>
+
+      {activeView === 'disputed' ? (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+            <div>
+              <h3 className="font-black text-slate-800 uppercase tracking-tight">Disputed Inventory Batches</h3>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Batches flagged for variance or damage during intake</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/50">
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantity</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Liability (Daily)</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {disputedBatches.map(batch => (
+                  <tr key={batch.batch_id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-8 py-4 font-black text-slate-800">#{batch.batch_id}</td>
+                    <td className="px-8 py-4 text-xs text-slate-600">{batch.current_location}</td>
+                    <td className="px-8 py-4 text-xs font-black text-slate-800">{batch.quantity} Units</td>
+                    <td className="px-8 py-4 text-xs font-black text-amber-600">R {formatCurrency(batch.daily_accrued_liability)}</td>
+                    <td className="px-8 py-4 text-right">
+                      <button 
+                        onClick={() => handleResolveDispute(batch.batch_id)}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-sm"
+                      >
+                        Resolve Dispute
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {disputedBatches.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-8 py-20 text-center text-slate-400 italic">No disputed batches found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Claims List */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm h-fit">
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -287,7 +372,8 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
           )}
         </div>
       </div>
-    </div>
+    )}
+  </div>
   );
 };
 

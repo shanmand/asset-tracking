@@ -37,6 +37,7 @@ const FleetExpenseReport: React.FC = () => {
   const [roadworthyHistory, setRoadworthyHistory] = useState<TruckRoadworthyHistory[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [readiness, setReadiness] = useState<any[]>([]);
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
@@ -54,15 +55,17 @@ const FleetExpenseReport: React.FC = () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
-      const [expensesRes, historyRes, branchesRes] = await Promise.all([
+      const [expensesRes, historyRes, branchesRes, readinessRes] = await Promise.all([
         supabase.from('vw_branch_fleet_expenses').select('*'),
         supabase.from('truck_roadworthy_history').select('*').order('test_date', { ascending: false }),
-        supabase.from('branches').select('*').order('name')
+        supabase.from('branches').select('*').order('name'),
+        supabase.from('vw_fleet_readiness').select('*')
       ]);
 
       if (expensesRes.data) setExpenses(expensesRes.data);
       if (historyRes.data) setRoadworthyHistory(historyRes.data);
       if (branchesRes.data) setBranches(branchesRes.data);
+      if (readinessRes.data) setReadiness(readinessRes.data);
     } catch (err) {
       console.error("Error fetching report data:", err);
     } finally {
@@ -113,18 +116,23 @@ const FleetExpenseReport: React.FC = () => {
       license_cost: number, 
       cof_cost: number,
       total: number,
-      license_doc_url?: string
+      license_doc_url?: string,
+      license_status?: string,
+      ytd_roadworthy_costs?: number
     }> = {};
 
     filteredExpenses.forEach(exp => {
       if (!summary[exp.truck_id]) {
+        const truckReadiness = readiness.find(r => r.truck_id === exp.truck_id);
         summary[exp.truck_id] = { 
           plate_number: exp.plate_number, 
           branch_name: exp.branch_name, 
           license_cost: 0, 
           cof_cost: 0,
           total: 0,
-          license_doc_url: exp.license_doc_url
+          license_doc_url: exp.license_doc_url,
+          license_status: truckReadiness?.license_status || 'Unknown',
+          ytd_roadworthy_costs: truckReadiness?.ytd_roadworthy_costs || 0
         };
       }
       if (exp.expense_type === 'License Renewal') {
@@ -136,7 +144,7 @@ const FleetExpenseReport: React.FC = () => {
     });
 
     return Object.entries(summary).map(([id, data]) => ({ id, ...data }));
-  }, [filteredExpenses]);
+  }, [filteredExpenses, readiness]);
 
   const selectedTruckHistory = useMemo(() => {
     if (!selectedTruckId) return [];
@@ -354,6 +362,7 @@ const FleetExpenseReport: React.FC = () => {
                 <tr className="bg-slate-50/50">
                   <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Truck</th>
                   <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Branch</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
                   <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">License</th>
                   <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">COF/Repairs</th>
                   <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total</th>
@@ -373,6 +382,16 @@ const FleetExpenseReport: React.FC = () => {
                     </td>
                     <td className="px-8 py-4">
                       <span className="text-xs font-bold text-slate-500 uppercase">{truck.branch_name}</span>
+                    </td>
+                    <td className="px-8 py-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                        truck.license_status === 'Compliant' ? 'bg-emerald-100 text-emerald-600' :
+                        truck.license_status === 'Warning' ? 'bg-amber-100 text-amber-600' :
+                        truck.license_status === 'Critical' ? 'bg-orange-100 text-orange-600' :
+                        'bg-rose-100 text-rose-600'
+                      }`}>
+                        {truck.license_status}
+                      </span>
                     </td>
                     <td className="px-8 py-4 text-right">
                       <span className="text-xs font-black text-slate-900">R {truck.license_cost.toLocaleString()}</span>

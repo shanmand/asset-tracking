@@ -40,8 +40,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
       setIsLoading(true);
       try {
-        const [batchesRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes, branchesRes] = await Promise.all([
-          supabase.from('batches').select('*'),
+        const [inventoryRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes, branchesRes] = await Promise.all([
+          supabase.from('vw_global_inventory_tracker').select('*'),
           supabase.from('asset_losses').select('*'),
           supabase.from('locations').select('*'),
           supabase.from('users').select('*'),
@@ -50,7 +50,21 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           supabase.from('branches').select('*')
         ]);
 
-        if (batchesRes.data) setDbBatches(batchesRes.data);
+        if (inventoryRes.data) {
+          // Map view columns back to Batch type for compatibility or use directly
+          const mappedBatches = inventoryRes.data.map((item: any) => ({
+            id: item.batch_id,
+            asset_id: item.asset_id,
+            quantity: item.quantity,
+            current_location_id: item.current_location_id || item.current_location, // Fallback if ID not in view
+            status: item.batch_status,
+            daily_accrued_liability: item.daily_accrued_liability,
+            daily_rental_fee: item.daily_rental_fee,
+            created_at: item.transaction_date,
+            transaction_date: item.transaction_date
+          }));
+          setDbBatches(mappedBatches as any);
+        }
         if (lossesRes.data) setDbLosses(lossesRes.data);
         if (locsRes.data) setDbLocations(locsRes.data);
         if (usersRes.data) setDbUsers(usersRes.data);
@@ -84,7 +98,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
   const currentBranchId = useMemo(() => {
     if (branchContext === 'Consolidated') return null;
-    return dbBranches.find(b => b.name.includes(branchContext))?.id;
+    return dbBranches.find(b => b?.name?.includes(branchContext))?.id;
   }, [branchContext, dbBranches]);
 
   const filteredBatches = useMemo(() => {
@@ -93,17 +107,15 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     // Apply Branch Filter
     if (currentBranchId) {
       base = base.filter(b => {
-        const loc = displayLocations.find(l => l.id === b.current_location_id);
+        const loc = displayLocations.find(l => l?.id === b?.current_location_id || l?.name === b?.current_location_id);
         return loc?.branch_id === currentBranchId;
       });
     }
 
-    // Apply "Our Account" Logic:
-    // Crates transferred to QSR/Supermarket (External Locations) and are CHEP/Pallets (External Assets) 
-    // need to be removed from our account.
+    // Apply "Our Account" Logic
     return base.filter(b => {
-      const asset = displayAssets.find(a => a.id === b.asset_id);
-      const loc = displayLocations.find(l => l.id === b.current_location_id);
+      const asset = displayAssets.find(a => a?.id === b?.asset_id);
+      const loc = displayLocations.find(l => l?.id === b?.current_location_id || l?.name === b?.current_location_id);
       
       if (asset?.ownership_type === 'External' && loc?.category === 'External') {
         return false; // Remove from our account
@@ -116,7 +128,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     let base = displayLosses;
     if (currentBranchId) {
       base = base.filter(l => {
-        const loc = displayLocations.find(loc => loc.id === l.last_known_location_id);
+        const loc = displayLocations.find(loc => loc?.id === l?.last_known_location_id);
         return loc?.branch_id === currentBranchId;
       });
     }
@@ -127,7 +139,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     if (filteredBatches.length === 0) return 0;
     const now = new Date().getTime();
     const totalDays = filteredBatches.reduce((acc, b) => {
-      const created = new Date(b.created_at).getTime();
+      const created = new Date(b?.created_at || Date.now()).getTime();
       const diff = (now - created) / (1000 * 60 * 60 * 24);
       return acc + diff;
     }, 0);
@@ -135,25 +147,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   }, [filteredBatches]);
 
   const totalPallets = filteredBatches.reduce((acc, b) => {
-    const asset = displayAssets.find(a => a.id === b.asset_id);
-    return asset?.type === 'Pallet' ? acc + b.quantity : acc;
+    const asset = displayAssets.find(a => a?.id === b?.asset_id);
+    return asset?.type === 'Pallet' ? acc + (b?.quantity || 0) : acc;
   }, 0);
 
   const estimatedUnbilledRental = useMemo(() => {
-    // Rental only for External Assets at Home Locations
-    return filteredBatches.reduce((acc, b) => {
-      const asset = displayAssets.find(a => a.id === b.asset_id);
-      const loc = displayLocations.find(l => l.id === b.current_location_id);
-      
-      if (asset?.ownership_type === 'External' && loc?.category === 'Home') {
-        // Mock rate: R 5.15 per unit per day (approx)
-        return acc + (b.quantity * 5.15 * 30); 
-      }
-      return acc;
-    }, 0);
-  }, [filteredBatches, displayAssets, displayLocations]);
+    // Use the daily_accrued_liability from the view
+    return filteredBatches.reduce((acc, b: any) => acc + (b?.daily_accrued_liability || 0), 0);
+  }, [filteredBatches]);
 
-  const pendingClaimsValue = displayClaims.filter(c => c.status === 'Lodged').reduce((acc, c) => acc + c.amount_claimed_zar, 0);
+  const pendingClaimsValue = displayClaims.filter(c => c?.status === 'Lodged').reduce((acc, c) => acc + (c?.amount_claimed_zar || 0), 0);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -209,10 +212,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           <div className="p-8">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredLosses.slice(0, 3).map(loss => {
-                const batch = displayBatches.find(b => b.id === loss?.batch_id);
-                const reporter = displayUsers.find(u => u.id === loss?.reported_by);
+                const batch = displayBatches.find(b => b?.id === loss?.batch_id);
+                const reporter = displayUsers.find(u => u?.id === loss?.reported_by);
                 const riskLevel = (loss?.lost_quantity || 0) > 20 ? 'CRITICAL' : 'MODERATE';
-                const location = displayLocations.find(l => l.id === loss?.last_known_location_id);
+                const location = displayLocations.find(l => l?.id === loss?.last_known_location_id);
                 
                 return (
                   <div key={loss?.id} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
@@ -358,7 +361,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           </div>
           <div className="divide-y divide-slate-50 overflow-y-auto max-h-[420px]">
             {filteredBatches.map((batch, i) => {
-              const loc = displayLocations.find(l => l.id === batch?.current_location_id);
+              const loc = displayLocations.find(l => l?.id === batch?.current_location_id || l?.name === batch?.current_location_id);
               return (
                 <div key={batch?.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
                   <div className="flex items-center gap-4">
@@ -378,7 +381,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-black text-slate-800">{batch?.quantity} Units</p>
-                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{displayAssets.find(a => a.id === batch?.asset_id)?.type}</p>
+                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{displayAssets.find(a => a?.id === batch?.asset_id)?.type}</p>
                   </div>
                 </div>
               );
