@@ -104,22 +104,45 @@ CREATE TABLE public.drivers (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.inspections (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    driver_id TEXT REFERENCES public.drivers(id),
-    truck_id TEXT REFERENCES public.trucks(id),
-    odometer_reading INTEGER NOT NULL,
-    odometer_photo_url TEXT,
+CREATE TABLE public.vehicle_inspections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    truck_id TEXT NOT NULL, -- References your 'trucks' table
+    driver_id UUID DEFAULT auth.uid(), -- Automatically tags the logged-in driver
+    inspection_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    odometer_reading INT,
+    
+    -- South African Safety Checklist
     tyres_ok BOOLEAN DEFAULT TRUE,
     lights_ok BOOLEAN DEFAULT TRUE,
     brakes_ok BOOLEAN DEFAULT TRUE,
-    fluids_ok BOOLEAN DEFAULT TRUE,
-    fault_notes TEXT,
+    fluids_ok BOOLEAN DEFAULT TRUE, -- Oil/Water
+    license_disc_present BOOLEAN DEFAULT TRUE,
+    
+    -- Evidence & Faults
+    odometer_photo_url TEXT,
+    fault_description TEXT,
     fault_photo_url TEXT,
-    latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    is_grounded BOOLEAN DEFAULT FALSE, -- If TRUE, truck shows as 'Red' on Dashboard
+    
+    branch_id TEXT -- Tied to the branch performing the check
 );
+
+-- 2. Enable Row Level Security (RLS)
+ALTER TABLE public.vehicle_inspections ENABLE ROW LEVEL SECURITY;
+
+-- 3. Security Policy: Allow Drivers to submit (Insert)
+CREATE POLICY "Allow drivers to submit inspections" 
+ON public.vehicle_inspections 
+FOR INSERT 
+TO authenticated 
+WITH CHECK (true);
+
+-- 4. Security Policy: Allow Managers to view (Select)
+CREATE POLICY "Allow managers to view all inspections" 
+ON public.vehicle_inspections 
+FOR SELECT 
+TO authenticated 
+USING (true);
 
 CREATE TABLE public.driver_shifts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

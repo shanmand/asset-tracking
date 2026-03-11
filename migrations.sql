@@ -206,3 +206,46 @@ JOIN public.fee_schedule fs ON bt.asset_id = fs.asset_id
 WHERE bt.transfer_confirmed_by_customer = FALSE 
   AND fs.effective_to IS NULL
 GROUP BY br.name, l.name, l.id, br.id;
+
+-- 8. Vehicle Inspections Table
+CREATE TABLE IF NOT EXISTS public.vehicle_inspections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    truck_id TEXT NOT NULL, -- References your 'trucks' table
+    driver_id UUID DEFAULT auth.uid(), -- Automatically tags the logged-in driver
+    inspection_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    odometer_reading INT,
+    
+    -- South African Safety Checklist
+    tyres_ok BOOLEAN DEFAULT TRUE,
+    lights_ok BOOLEAN DEFAULT TRUE,
+    brakes_ok BOOLEAN DEFAULT TRUE,
+    fluids_ok BOOLEAN DEFAULT TRUE, -- Oil/Water
+    license_disc_present BOOLEAN DEFAULT TRUE,
+    
+    -- Evidence & Faults
+    odometer_photo_url TEXT,
+    fault_description TEXT,
+    fault_photo_url TEXT,
+    is_grounded BOOLEAN DEFAULT FALSE, -- If TRUE, truck shows as 'Red' on Dashboard
+    
+    branch_id TEXT -- Tied to the branch performing the check
+);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.vehicle_inspections ENABLE ROW LEVEL SECURITY;
+
+-- Security Policy: Allow Drivers to submit (Insert)
+DROP POLICY IF EXISTS "Allow drivers to submit inspections" ON public.vehicle_inspections;
+CREATE POLICY "Allow drivers to submit inspections" 
+ON public.vehicle_inspections 
+FOR INSERT 
+TO authenticated 
+WITH CHECK (true);
+
+-- Security Policy: Allow Managers to view (Select)
+DROP POLICY IF EXISTS "Allow managers to view all inspections" ON public.vehicle_inspections;
+CREATE POLICY "Allow managers to view all inspections" 
+ON public.vehicle_inspections 
+FOR SELECT 
+TO authenticated 
+USING (true);

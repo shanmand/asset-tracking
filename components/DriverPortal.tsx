@@ -41,7 +41,8 @@ const DriverPortal: React.FC = () => {
     tyres: true,
     lights: true,
     brakes: true,
-    fluids: true
+    fluids: true,
+    licenseDisc: true
   });
   const [faultNotes, setFaultNotes] = useState('');
   const [faultPhoto, setFaultPhoto] = useState<File | null>(null);
@@ -135,6 +136,9 @@ const DriverPortal: React.FC = () => {
         faultPhotoUrl = await uploadFleetDocument(faultPhoto, driver.branch_id || 'mobile', selectedTruckId, `fault_${Date.now()}`);
       }
 
+      // Automatic Grounding: If any of the safety checkboxes (Tyres, Brakes, Lights) are false, set is_grounded to true
+      const isGrounded = !checklist.tyres || !checklist.brakes || !checklist.lights;
+
       const inspectionData: Inspection = {
         driver_id: driver.id,
         truck_id: selectedTruckId,
@@ -144,16 +148,19 @@ const DriverPortal: React.FC = () => {
         lights_ok: checklist.lights,
         brakes_ok: checklist.brakes,
         fluids_ok: checklist.fluids,
-        fault_notes: faultNotes,
+        license_disc_present: checklist.licenseDisc,
+        fault_description: faultNotes,
         fault_photo_url: faultPhotoUrl,
+        is_grounded: isGrounded,
+        branch_id: driver.branch_id,
         latitude: location?.lat,
         longitude: location?.lng
       };
 
-      const { error } = await supabase.from('inspections').upsert([inspectionData]);
+      const { error } = await supabase.from('vehicle_inspections').insert([inspectionData]);
       if (error) throw error;
 
-      setNotification({ msg: "Inspection submitted successfully", type: 'success' });
+      setNotification({ msg: "Report Submitted Successfully", type: 'success' });
       setView('home');
       resetInspection();
     } catch (err: any) {
@@ -169,7 +176,7 @@ const DriverPortal: React.FC = () => {
     setSelectedTruckId('');
     setOdometer('');
     setOdometerPhoto(null);
-    setChecklist({ tyres: true, lights: true, brakes: true, fluids: true });
+    setChecklist({ tyres: true, lights: true, brakes: true, fluids: true, licenseDisc: true });
     setFaultNotes('');
     setFaultPhoto(null);
   };
@@ -464,7 +471,11 @@ const DriverPortal: React.FC = () => {
                         onClick={() => setChecklist({...checklist, [key]: !val})}
                         className={`w-full p-5 rounded-2xl border flex items-center justify-between transition-all ${val ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}
                       >
-                        <span className="font-black uppercase text-xs tracking-widest">{key}</span>
+                        <span className="font-black uppercase text-xs tracking-widest">
+                          {key === 'fluids' ? 'Oil / Water' : 
+                           key === 'licenseDisc' ? 'License Disc' : 
+                           key}
+                        </span>
                         {val ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
                       </button>
                     ))}
@@ -480,7 +491,7 @@ const DriverPortal: React.FC = () => {
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Fault Reporting</h4>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notes (Required if any Fail)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fault Description (Notes)</label>
                     <textarea 
                       placeholder="Describe any issues..."
                       className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-black outline-none focus:ring-2 focus:ring-amber-500 min-h-[120px]"
