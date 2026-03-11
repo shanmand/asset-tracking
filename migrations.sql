@@ -286,3 +286,22 @@ SELECT
     ) as roadworthy_expiry
 FROM public.trucks t
 LEFT JOIN public.branches b ON t.branch_id = b.id;
+
+-- 9. Auto-Supplier Logic: Quick-Register RPC
+CREATE OR REPLACE FUNCTION public.check_and_create_supplier(p_supplier_id TEXT)
+RETURNS VOID AS $$
+BEGIN
+    -- 1. Ensure it exists in locations (since asset_master references it)
+    IF NOT EXISTS (SELECT 1 FROM public.locations WHERE id = p_supplier_id) THEN
+        INSERT INTO public.locations (id, name, type, category, partner_type)
+        VALUES (p_supplier_id, 'Auto-Registered: ' || p_supplier_id, 'Supplier', 'External', 'Supplier');
+    END IF;
+
+    -- 2. Ensure it exists in business_parties (as requested)
+    -- Since business_parties uses UUID, we check by name to see if it's already there
+    IF NOT EXISTS (SELECT 1 FROM public.business_parties WHERE name = p_supplier_id AND party_type = 'Supplier') THEN
+        INSERT INTO public.business_parties (name, party_type)
+        VALUES (p_supplier_id, 'Supplier');
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

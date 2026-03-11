@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2, Pencil, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType, Location, PartnerType, BusinessParty } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import AddAssetForm from './AddAssetForm';
 
 interface AssetListProps {
   isAdmin: boolean;
@@ -16,33 +17,38 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const fetchData = async () => {
+    if (!isSupabaseConfigured) {
+      setAssets(MOCK_ASSETS);
+      setFees(MOCK_FEES);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const [assetsRes, feesRes, suppliersRes] = await Promise.all([
+        supabase.from('asset_master').select('*'),
+        supabase.from('fee_schedule').select('*'),
+        supabase.from('business_parties').select('*').eq('party_type', 'Supplier')
+      ]);
+
+      if (assetsRes.data) setAssets(assetsRes.data);
+      if (feesRes.data) setFees(feesRes.data);
+      if (suppliersRes.data) setSuppliers(suppliersRes.data);
+    } catch (err) {
+      console.error("Asset List Fetch Error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshSuppliers = async () => {
+    const { data } = await supabase.from('business_parties').select('*').eq('party_type', 'Supplier');
+    if (data) setSuppliers(data);
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      if (!isSupabaseConfigured) {
-        setAssets(MOCK_ASSETS);
-        setFees(MOCK_FEES);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const [assetsRes, feesRes, suppliersRes] = await Promise.all([
-          supabase.from('asset_master').select('*'),
-          supabase.from('fee_schedule').select('*'),
-          supabase.from('business_parties').select('*').eq('party_type', 'Supplier')
-        ]);
-
-        if (assetsRes.data) setAssets(assetsRes.data);
-        if (feesRes.data) setFees(feesRes.data);
-        if (suppliersRes.data) setSuppliers(suppliersRes.data);
-      } catch (err) {
-        console.error("Asset List Fetch Error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
@@ -53,61 +59,8 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
 
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetMaster | null>(null);
-  const [newAsset, setNewAsset] = useState<Partial<AssetMaster>>({
-    id: '',
-    name: '',
-    type: AssetType.CRATE,
-    dimensions: '',
-    material: '',
-    billing_model: BillingModel.DAILY_RENTAL,
-    ownership_type: OwnershipType.EXTERNAL,
-    supplier_id: ''
-  });
-
-  const handleAddAsset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Pre-flight check
-    if (newAsset.ownership_type === OwnershipType.EXTERNAL && newAsset.supplier_id) {
-      const exists = suppliers.some(s => s.id === newAsset.supplier_id);
-      if (!exists) {
-        alert('Supplier ID not found. Please register the supplier in the Business Parties module first.');
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    try {
-      if (isSupabaseConfigured) {
-        const { error } = await supabase
-          .from('asset_master')
-          .insert([newAsset]);
-        if (error) throw error;
-      }
-      
-      setAssets(prev => [...prev, newAsset as AssetMaster]);
-      setIsAdding(false);
-      setNewAsset({ 
-        id: '', 
-        name: '', 
-        type: AssetType.CRATE, 
-        dimensions: '', 
-        material: '',
-        billing_model: BillingModel.DAILY_RENTAL,
-        ownership_type: OwnershipType.EXTERNAL
-      });
-    } catch (err: any) {
-      console.error("Add Asset Error:", err);
-      if (err.code === '23503') {
-        alert('Cannot add asset: The Supplier ID entered does not exist in your records.');
-      } else {
-        alert("Failed to add asset. Check RLS policies.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleEditAsset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,14 +68,14 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     
     // Pre-flight check
     if (editingAsset.ownership_type === OwnershipType.EXTERNAL && editingAsset.supplier_id) {
-      const exists = suppliers.some(s => s.id === editingAsset.supplier_id);
+      const exists = suppliers.some(s => s.id === editingAsset.supplier_id || s.name === editingAsset.supplier_id);
       if (!exists) {
-        alert('Supplier ID not found. Please register the supplier in the Business Parties module first.');
+        alert('Conflict: This Supplier ID needs to be registered first.');
         return;
       }
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
       if (isSupabaseConfigured) {
         const { error } = await supabase
@@ -146,12 +99,12 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     } catch (err: any) {
       console.error("Edit Asset Error:", err);
       if (err.code === '23503') {
-        alert('Cannot add asset: The Supplier ID entered does not exist in your records.');
+        alert('Conflict: This Supplier ID needs to be registered first.');
       } else {
         alert("Failed to update asset.");
       }
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -299,129 +252,15 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
       </div>
 
       {isAdding && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
-            <div className="p-6 bg-slate-900 text-white">
-              <h3 className="text-lg font-bold">Register New Asset Type</h3>
-              <p className="text-xs text-slate-400">Define a new equipment category for the registry.</p>
-            </div>
-            <form onSubmit={handleAddAsset} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Asset ID (e.g. CRT-01)</label>
-                <input 
-                  required
-                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                  value={newAsset.id}
-                  onChange={e => setNewAsset({...newAsset, id: e.target.value})}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Asset Name</label>
-                <input 
-                  required
-                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                  value={newAsset.name}
-                  onChange={e => setNewAsset({...newAsset, name: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Type</label>
-                  <select 
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                    value={newAsset.type}
-                    onChange={e => setNewAsset({...newAsset, type: e.target.value as any})}
-                  >
-                    <option value="Crate">Crate</option>
-                    <option value="Pallet">Pallet</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Material</label>
-                  <input 
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                    value={newAsset.material}
-                    onChange={e => setNewAsset({...newAsset, material: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Dimensions</label>
-                <input 
-                  className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                  value={newAsset.dimensions}
-                  onChange={e => setNewAsset({...newAsset, dimensions: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Billing Model</label>
-                  <select 
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                    value={newAsset.billing_model}
-                    onChange={e => setNewAsset({...newAsset, billing_model: e.target.value as any})}
-                  >
-                    {Object.values(BillingModel).map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Ownership</label>
-                  <select 
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                    value={newAsset.ownership_type}
-                    onChange={e => setNewAsset({...newAsset, ownership_type: e.target.value as any})}
-                  >
-                    {Object.values(OwnershipType).map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-              </div>
-              {newAsset.ownership_type === OwnershipType.EXTERNAL && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Supplier (Owner)</label>
-                  <div className="relative">
-                    <input 
-                      list="suppliers-list"
-                      className={`w-full p-2 border rounded-lg text-sm ${
-                        newAsset.supplier_id && !suppliers.find(s => s.id === newAsset.supplier_id) 
-                          ? 'border-amber-500 bg-amber-50' 
-                          : 'border-slate-200'
-                      }`}
-                      placeholder="Type or select supplier ID..."
-                      value={newAsset.supplier_id}
-                      onChange={e => setNewAsset({...newAsset, supplier_id: e.target.value})}
-                    />
-                    <datalist id="suppliers-list">
-                      {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </datalist>
-                  </div>
-                  {newAsset.supplier_id && !suppliers.find(s => s.id === newAsset.supplier_id) && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <AlertTriangle size={10} className="text-amber-600" />
-                      <p className="text-[10px] text-amber-600 font-bold">
-                        Supplier ID not found. Please register the supplier in the Business Parties module first.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-3 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold"
-                >
-                  Save Asset
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AddAssetForm 
+          onClose={() => setIsAdding(false)}
+          onSuccess={(asset) => {
+            setAssets(prev => [...prev, asset]);
+            setIsAdding(false);
+          }}
+          suppliers={suppliers}
+          refreshSuppliers={refreshSuppliers}
+        />
       )}
 
       {isEditing && editingAsset && (
@@ -531,8 +370,10 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold"
+                  disabled={isSubmitting}
+                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2"
                 >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
                   Update Asset
                 </button>
               </div>
