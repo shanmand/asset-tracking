@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2, Pencil, Trash2 } from 'lucide-react';
-import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType, Location, PartnerType } from '../types';
+import { Search, Plus, Filter, MoreVertical, ShieldAlert, Loader2, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { AssetMaster, FeeSchedule, AssetType, BillingModel, OwnershipType, Location, PartnerType, BusinessParty } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface AssetListProps {
@@ -12,7 +12,7 @@ interface AssetListProps {
 const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>([]);
-  const [suppliers, setSuppliers] = useState<Location[]>([]);
+  const [suppliers, setSuppliers] = useState<BusinessParty[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -30,7 +30,7 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
         const [assetsRes, feesRes, suppliersRes] = await Promise.all([
           supabase.from('asset_master').select('*'),
           supabase.from('fee_schedule').select('*'),
-          supabase.from('locations').select('*').eq('partner_type', PartnerType.SUPPLIER)
+          supabase.from('business_parties').select('*').eq('party_type', 'Supplier')
         ]);
 
         if (assetsRes.data) setAssets(assetsRes.data);
@@ -68,6 +68,15 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Pre-flight check
+    if (newAsset.ownership_type === OwnershipType.EXTERNAL && newAsset.supplier_id) {
+      const exists = suppliers.some(s => s.id === newAsset.supplier_id);
+      if (!exists) {
+        alert('Supplier ID not found. Please register the supplier in the Business Parties module first.');
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
@@ -88,9 +97,13 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
         billing_model: BillingModel.DAILY_RENTAL,
         ownership_type: OwnershipType.EXTERNAL
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Add Asset Error:", err);
-      alert("Failed to add asset. Check RLS policies.");
+      if (err.code === '23503') {
+        alert('Cannot add asset: The Supplier ID entered does not exist in your records.');
+      } else {
+        alert("Failed to add asset. Check RLS policies.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -100,6 +113,15 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     e.preventDefault();
     if (!editingAsset) return;
     
+    // Pre-flight check
+    if (editingAsset.ownership_type === OwnershipType.EXTERNAL && editingAsset.supplier_id) {
+      const exists = suppliers.some(s => s.id === editingAsset.supplier_id);
+      if (!exists) {
+        alert('Supplier ID not found. Please register the supplier in the Business Parties module first.');
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
@@ -121,9 +143,13 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
       setAssets(prev => prev.map(a => a.id === editingAsset.id ? editingAsset : a));
       setIsEditing(false);
       setEditingAsset(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Edit Asset Error:", err);
-      alert("Failed to update asset.");
+      if (err.code === '23503') {
+        alert('Cannot add asset: The Supplier ID entered does not exist in your records.');
+      } else {
+        alert("Failed to update asset.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -352,14 +378,30 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
               {newAsset.ownership_type === OwnershipType.EXTERNAL && (
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Supplier (Owner)</label>
-                  <select 
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                    value={newAsset.supplier_id}
-                    onChange={e => setNewAsset({...newAsset, supplier_id: e.target.value})}
-                  >
-                    <option value="">Select Supplier...</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <div className="relative">
+                    <input 
+                      list="suppliers-list"
+                      className={`w-full p-2 border rounded-lg text-sm ${
+                        newAsset.supplier_id && !suppliers.find(s => s.id === newAsset.supplier_id) 
+                          ? 'border-amber-500 bg-amber-50' 
+                          : 'border-slate-200'
+                      }`}
+                      placeholder="Type or select supplier ID..."
+                      value={newAsset.supplier_id}
+                      onChange={e => setNewAsset({...newAsset, supplier_id: e.target.value})}
+                    />
+                    <datalist id="suppliers-list">
+                      {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </datalist>
+                  </div>
+                  {newAsset.supplier_id && !suppliers.find(s => s.id === newAsset.supplier_id) && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <AlertTriangle size={10} className="text-amber-600" />
+                      <p className="text-[10px] text-amber-600 font-bold">
+                        Supplier ID not found. Please register the supplier in the Business Parties module first.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-3 pt-4">
@@ -453,14 +495,30 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
               {editingAsset.ownership_type === OwnershipType.EXTERNAL && (
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Supplier (Owner)</label>
-                  <select 
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                    value={editingAsset.supplier_id}
-                    onChange={e => setEditingAsset({...editingAsset, supplier_id: e.target.value})}
-                  >
-                    <option value="">Select Supplier...</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <div className="relative">
+                    <input 
+                      list="suppliers-list-edit"
+                      className={`w-full p-2 border rounded-lg text-sm ${
+                        editingAsset.supplier_id && !suppliers.find(s => s.id === editingAsset.supplier_id) 
+                          ? 'border-amber-500 bg-amber-50' 
+                          : 'border-slate-200'
+                      }`}
+                      placeholder="Type or select supplier ID..."
+                      value={editingAsset.supplier_id}
+                      onChange={e => setEditingAsset({...editingAsset, supplier_id: e.target.value})}
+                    />
+                    <datalist id="suppliers-list-edit">
+                      {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </datalist>
+                  </div>
+                  {editingAsset.supplier_id && !suppliers.find(s => s.id === editingAsset.supplier_id) && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <AlertTriangle size={10} className="text-amber-600" />
+                      <p className="text-[10px] text-amber-600 font-bold">
+                        Supplier ID not found. Please register the supplier in the Business Parties module first.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-3 pt-4">
