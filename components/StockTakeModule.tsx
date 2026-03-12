@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ClipboardCheck, AlertTriangle, Search, MapPin, Package, History, TrendingDown, Loader2, CheckCircle2, Plus } from 'lucide-react';
+import { ClipboardCheck, AlertTriangle, Search, MapPin, Package, History as HistoryIcon, TrendingDown, Loader2, CheckCircle2, Plus } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { normalizePayload } from '../supabaseUtils';
 import BranchSelector from './BranchSelector';
@@ -206,7 +206,7 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialL
                           <td className="py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-all">
-                                <History size={14} />
+                                <HistoryIcon size={14} />
                               </div>
                               <span className="text-sm font-bold text-slate-900">#{batch.id}</span>
                             </div>

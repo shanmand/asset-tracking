@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Database, ArrowDownToLine } from 'lucide-react';
+import { Package, Plus, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Database, ArrowDownToLine, Edit2, Trash2, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BranchSelector from './BranchSelector';
 import { Batch, AssetMaster, Location, LocationType } from '../types';
@@ -11,6 +11,8 @@ const BatchManagement: React.FC = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
+  const [editForm, setEditForm] = useState({ quantity: 0, created_at: '' });
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<string>('');
@@ -97,6 +99,54 @@ const BatchManagement: React.FC = () => {
       fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to create batch", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleEditBatch = (batch: Batch) => {
+    setEditingBatch(batch);
+    setEditForm({
+      quantity: batch.quantity,
+      created_at: new Date(batch.created_at).toISOString().split('T')[0]
+    });
+  };
+
+  const handleUpdateBatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBatch) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.rpc('update_inventory_batch', {
+        p_batch_id: editingBatch.id,
+        p_quantity: editForm.quantity,
+        p_date_received: new Date(editForm.created_at).toISOString()
+      });
+      if (error) throw error;
+      setNotification({ msg: `Batch ${editingBatch.id} updated`, type: 'success' });
+      setEditingBatch(null);
+      fetchData();
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to update batch", type: 'error' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleDeleteBatch = async (id: string) => {
+    if (!confirm(`Are you sure you want to delete batch ${id}? This action cannot be undone.`)) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.rpc('delete_inventory_batch', {
+        p_batch_id: id
+      });
+      if (error) throw error;
+      setNotification({ msg: `Batch ${id} deleted`, type: 'success' });
+      fetchData();
+    } catch (err: any) {
+      setNotification({ msg: err.message || "Failed to delete batch", type: 'error' });
     } finally {
       setIsLoading(false);
       setTimeout(() => setNotification(null), 3000);
@@ -251,6 +301,7 @@ const BatchManagement: React.FC = () => {
                 <th className="px-8 py-5">Quantity</th>
                 <th className="px-8 py-5">Current Location</th>
                 <th className="px-8 py-5">Created At</th>
+                <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -279,6 +330,22 @@ const BatchManagement: React.FC = () => {
                   <td className="px-8 py-5 text-[10px] font-bold text-slate-400 uppercase">
                     {new Date(batch.created_at).toLocaleDateString()}
                   </td>
+                  <td className="px-8 py-5 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={() => handleEditBatch(batch)}
+                        className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteBatch(batch.id)}
+                        className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
@@ -292,6 +359,48 @@ const BatchManagement: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Batch Modal */}
+      {editingBatch && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h4 className="font-black text-sm uppercase tracking-widest text-slate-900">Edit Batch {editingBatch.id}</h4>
+              <button onClick={() => setEditingBatch(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleUpdateBatch} className="p-6 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Quantity Received</label>
+                <input 
+                  required
+                  type="number"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editForm.quantity}
+                  onChange={e => setEditForm({...editForm, quantity: parseInt(e.target.value) || 0})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Intake Date</label>
+                <input 
+                  required
+                  type="date"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={editForm.created_at}
+                  onChange={e => setEditForm({...editForm, created_at: e.target.value})}
+                />
+              </div>
+              <button 
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+              >
+                {isLoading ? <RefreshCw className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                UPDATE BATCH
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

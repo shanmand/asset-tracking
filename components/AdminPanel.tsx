@@ -17,7 +17,7 @@ import {
   DollarSign, 
   ArrowRight,
   TrendingUp,
-  History,
+  History as HistoryIcon,
   Trash2,
   RefreshCw,
   Search,
@@ -560,7 +560,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
           <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h4 className="font-bold text-xs uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
-                <History size={16} /> Current Active Rates
+                <HistoryIcon size={16} /> Current Active Rates
               </h4>
               <div className="space-y-4">
                 {displayFees.filter(f => f.asset_id === targetAsset && (f.is_active || f.effective_to === null)).map(f => (

@@ -11,7 +11,7 @@ import {
   User as UserIcon, 
   Calendar,
   Plus,
-  History,
+  History as HistoryIcon,
   CheckCircle2,
   X,
   Loader2,
@@ -392,7 +392,7 @@ const FleetCompliance: React.FC = () => {
                         onClick={() => setSelectedTruckId(truck.id)}
                         className={`p-2 rounded-lg transition-all ${selectedTruckId === truck.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:text-slate-600'}`}
                       >
-                        <History size={16} />
+                        <HistoryIcon size={16} />
                       </button>
                     </td>
                   </tr>

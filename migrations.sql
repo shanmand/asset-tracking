@@ -331,3 +331,29 @@ LEFT JOIN (
     JOIN public.asset_master am ON b.asset_id = am.id
     GROUP BY am.supplier_id
 ) stock_counts ON bp.id = stock_counts.supplier_id;
+
+-- 11. Inventory Intake Management RPCs
+CREATE OR REPLACE FUNCTION public.delete_inventory_batch(p_batch_id TEXT)
+RETURNS VOID AS $$
+BEGIN
+    -- Delete movements first due to FK
+    DELETE FROM public.batch_movements WHERE batch_id = p_batch_id;
+    DELETE FROM public.asset_losses WHERE batch_id = p_batch_id;
+    DELETE FROM public.claims WHERE batch_id = p_batch_id;
+    DELETE FROM public.thaan_slips WHERE batch_id = p_batch_id;
+    DELETE FROM public.batches WHERE id = p_batch_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.update_inventory_batch(
+    p_batch_id TEXT,
+    p_quantity INTEGER,
+    p_date_received DATE
+) RETURNS VOID AS $$
+BEGIN
+    UPDATE public.batches 
+    SET quantity = p_quantity, 
+        transaction_date = p_date_received
+    WHERE id = p_batch_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

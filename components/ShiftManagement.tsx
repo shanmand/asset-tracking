@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Truck as TruckIcon, 
-  User, 
+  User as UserIcon, 
   Plus, 
   Trash2, 
   CheckCircle2, 
@@ -155,7 +155,7 @@ const ShiftManagement: React.FC = () => {
                   <div className="flex items-center gap-8 flex-1">
                     <div className="flex flex-col items-center gap-1">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-900 border border-slate-200 shadow-sm">
-                        <User size={24} />
+                        <UserIcon size={24} />
                       </div>
                       <p className="text-[9px] font-black text-slate-400 uppercase">Driver</p>
                     </div>

@@ -26,7 +26,7 @@ import {
   Zap,
   Tag,
   Skull,
-  History,
+  History as HistoryIcon,
   ShieldAlert,
   Loader2
 } from 'lucide-react';
@@ -369,7 +369,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                    <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                     <History size={16} className="text-slate-400" /> Line-Item Rental Reconciliation
+                     <HistoryIcon size={16} className="text-slate-400" /> Line-Item Rental Reconciliation
                    </h4>
                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">HISTORICAL FEE MATCHING ACTIVE</span>
                 </div>

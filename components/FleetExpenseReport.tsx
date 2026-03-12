@@ -10,7 +10,7 @@ import {
   ChevronRight, 
   Truck as TruckIcon, 
   DollarSign, 
-  History,
+  History as HistoryIcon,
   X,
   ArrowUpRight,
   ArrowDownRight,
@@ -421,7 +421,7 @@ const FleetExpenseReport: React.FC = () => {
                           className="p-2 text-slate-300 hover:text-slate-900 hover:bg-white rounded-xl transition-all"
                           title="View History"
                         >
-                          <History size={18} />
+                          <HistoryIcon size={18} />
                         </button>
                       </div>
                     </td>
@@ -497,7 +497,7 @@ const FleetExpenseReport: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <History size={48} className="mx-auto text-slate-100 mb-4" />
+                    <HistoryIcon size={48} className="mx-auto text-slate-100 mb-4" />
                     <p className="text-slate-400 font-bold text-sm">No historical COF records found for this truck.</p>
                   </div>
                 )}

@@ -185,11 +185,11 @@ const BusinessDirectory: React.FC = () => {
                 <td className="px-6 py-4 text-center">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-lg">
                     <Package size={12} className="text-slate-400" />
-                    <span className="text-sm font-bold text-slate-700">{partner.asset_types}</span>
+                    <span className="text-sm font-bold text-slate-700">{partner.asset_types || 0}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <p className="text-sm font-black text-slate-800">{partner.current_stock.toLocaleString()}</p>
+                  <p className="text-sm font-black text-slate-800">{(partner.current_stock || 0).toLocaleString()}</p>
                   <p className="text-[10px] text-slate-400 uppercase font-bold">Units in System</p>
                 </td>
                 <td className="px-6 py-4 text-right">

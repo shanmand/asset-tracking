@@ -25,6 +25,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const [destination, setDestination] = useState(''); 
   const [truckId, setTruckId] = useState('');
   const [driverId, setDriverId] = useState('');
+  const [isInternal, setIsInternal] = useState(false);
   const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([]);
   const [condition, setCondition] = useState(MovementCondition.CLEAN);
   const [movementDate, setMovementDate] = useState(new Date().toISOString().split('T')[0]);
@@ -116,8 +117,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
     if (assets.some(a => !a.batchId)) validationErrors.push("Please select a Batch Reference for all items.");
     if (assets.some(a => a.quantity <= 0)) validationErrors.push("All line items must have a quantity > 0.");
     if (origin === destination) validationErrors.push("Origin and Destination cannot be the same.");
-    if (!truckId) validationErrors.push("Please select a truck.");
-    if (!driverId) validationErrors.push("Please select a driver.");
+    
+    if (!isInternal) {
+      if (!truckId) validationErrors.push("Please select a truck.");
+      if (!driverId) validationErrors.push("Please select a driver.");
+    }
     
     const destType = locations.find(l => l.id === destination)?.type;
     if (destType === LocationType.AT_CUSTOMER && !thaanFile) {
@@ -184,8 +188,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
               batch_id: targetBatchId,
               from_location_id: origin,
               to_location_id: destination,
-              truck_id: truckId,
-              driver_id: driverId,
+              truck_id: isInternal ? null : truckId,
+              driver_id: isInternal ? null : driverId,
               quantity: item.quantity,
               timestamp: new Date(movementDate).toISOString(),
               condition: condition,
@@ -275,7 +279,20 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                 <Zap size={18} className="text-emerald-400" />
                 <h3 className="font-bold text-sm uppercase tracking-widest">Movement Manifest</h3>
               </div>
-              {isReadOnly && <Lock size={14} className="text-slate-500" />}
+              <div className="flex items-center gap-4">
+                {!isReadOnly && (
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">Internal Transfer?</span>
+                    <div 
+                      onClick={() => setIsInternal(!isInternal)}
+                      className={`w-10 h-5 rounded-full relative transition-all ${isInternal ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                    >
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${isInternal ? 'left-6' : 'left-1'}`} />
+                    </div>
+                  </label>
+                )}
+                {isReadOnly && <Lock size={14} className="text-slate-500" />}
+              </div>
             </div>
 
             <form onSubmit={handleCaptureMovement} className="p-8 space-y-8">
@@ -370,10 +387,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
               {!isReadOnly && (
                 <>
-                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className={`p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6 transition-all ${isInternal ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
                     <div className="space-y-2">
                       <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
                       <select 
+                        disabled={isInternal}
                         className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
                         value={truckId}
                         onChange={e => setTruckId(e.target.value)}
@@ -385,6 +403,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     <div className="space-y-2">
                       <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
                       <select 
+                        disabled={isInternal}
                         className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
                         value={driverId}
                         onChange={e => handleDriverChange(e.target.value)}
@@ -393,7 +412,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                         {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
                       </select>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 pointer-events-auto opacity-100 grayscale-0">
                       <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><ClipboardList size={14} /> Movement Date</h4>
                       <input 
                         type="date"

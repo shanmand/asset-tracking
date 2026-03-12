@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_USERS } from '../constants';
-import { CheckCircle2, AlertTriangle, Truck, MapPin, Search, Zap, Package, UserCheck, XCircle, History, Calculator, ClipboardCheck, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Truck, MapPin, Search, Zap, Package, UserCheck, XCircle, History as HistoryIcon, Calculator, ClipboardCheck, Loader2 } from 'lucide-react';
 import { Batch, User as UserType, MovementCondition, BatchMovement, Truck as TruckType, Driver, AssetMaster } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -310,7 +310,7 @@ const VerificationOps: React.FC<VerificationOpsProps> = ({ currentUser }) => {
 
            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <h4 className="font-bold text-slate-800 text-xs uppercase tracking-widest flex items-center gap-2">
-                <History className="text-slate-400" size={16} /> Recent Branch Intake
+                <HistoryIcon className="text-slate-400" size={16} /> Recent Branch Intake
               </h4>
               <div className="space-y-4">
                  {movements.slice(0, 3).map(m => (

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Database, Table as TableIcon, Calculator, ShieldCheck, Zap, Receipt, Lock, Globe, History, MapPin, Truck, FileText, AlertTriangle, TrendingUp, Info, CheckCircle2, Terminal } from 'lucide-react';
+import { Database, Table as TableIcon, Calculator, ShieldCheck, Zap, Receipt, Lock, Globe, History as HistoryIcon, MapPin, Truck, FileText, AlertTriangle, TrendingUp, Info, CheckCircle2, Terminal } from 'lucide-react';
 
 const SchemaView: React.FC = () => {
   const [activeView, setActiveView] = useState<'visual' | 'sql' | 'python' | 'simulator' | 'postgres' | 'rbac' | 'backend' | 'scenario' | 'migrations'>('scenario');
@@ -113,7 +113,7 @@ const SchemaView: React.FC = () => {
               />
               <ScenarioStep 
                 num="2" title="Month 1 (Day 15): Batch Splitting" desc="50 pallets are moved from Kya Sands to Cold Storage (LOC-COLD-01)."
-                icon={<History className="text-blue-400" />}
+                icon={<HistoryIcon className="text-blue-400" />}
                 sql={`UPDATE Batches SET quantity = 50 WHERE id = 'B-SM-001';\nINSERT INTO Batches (id, asset_id, quantity, current_location_id, created_at, status)\nVALUES ('B-SM-001-B', 'SH-P01', 50, 'LOC-COLD-01', '2026-01-01', 'Success');`}
                 verify="Location updates but rental continues (Category is External)."
               />

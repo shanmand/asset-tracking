@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_CLAIMS, MOCK_BATCHES, MOCK_CLAIM_AUDITS } from '../constants';
-import { AlertCircle, Clock, CheckCircle2, History, User, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon, Info } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle2, History as HistoryIcon, User as UserIcon, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon, Info } from 'lucide-react';
 import { ClaimStatus, Claim, Batch, ClaimAudit, Truck, Driver } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -117,7 +117,65 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
     }
   };
 
-  const workflow: ClaimStatus[] = ['Lodged', 'Under Assessment', 'Returned for Assessment', 'Accepted'];
+  const handleApproveClaim = async () => {
+    if (!selectedClaim || !isSupabaseConfigured) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('claims')
+        .update({ status: 'Accepted' })
+        .eq('id', selectedClaim.id);
+      
+      if (error) throw error;
+
+      await supabase.from('claim_audits').insert([{
+        claim_id: selectedClaim.id,
+        status_from: selectedClaim.status,
+        status_to: 'Accepted',
+        notes: 'Claim approved. Credit processed for supplier.',
+        updated_by: 'Manager',
+        timestamp: new Date().toISOString()
+      }]);
+
+      alert("Claim approved successfully.");
+      window.location.reload();
+    } catch (err: any) {
+      alert("Error approving claim: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRejectClaim = async () => {
+    if (!selectedClaim || !isSupabaseConfigured) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('claims')
+        .update({ status: 'Rejected' })
+        .eq('id', selectedClaim.id);
+      
+      if (error) throw error;
+
+      await supabase.from('claim_audits').insert([{
+        claim_id: selectedClaim.id,
+        status_from: selectedClaim.status,
+        status_to: 'Rejected',
+        notes: 'Claim rejected after assessment.',
+        updated_by: 'Manager',
+        timestamp: new Date().toISOString()
+      }]);
+
+      alert("Claim rejected.");
+      window.location.reload();
+    } catch (err: any) {
+      alert("Error rejecting claim: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const workflow: ClaimStatus[] = ['Lodged', 'Under Assessment', 'Returned for Assessment', 'Accepted', 'Rejected'];
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -316,7 +374,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
               {/* Audit Log */}
               <div className="border-t border-slate-100 pt-8">
                 <h4 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-                  <History size={18} className="text-slate-400" />
+                  <HistoryIcon size={18} className="text-slate-400" />
                   Workflow Audit Log
                 </h4>
                 <div className="space-y-6 relative pl-4 border-l border-slate-100">
@@ -332,7 +390,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
                           <p className="text-xs text-slate-500 mt-1">{log.notes}</p>
                         </div>
                         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                          <User size={10} /> {log.updated_by}
+                          <UserIcon size={10} /> {log.updated_by}
                         </div>
                       </div>
                     </div>
@@ -341,13 +399,19 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
                 </div>
               </div>
                            {/* Actions */}
-              {isManager ? (
+              {isManager && selectedClaim.status !== 'Accepted' && selectedClaim.status !== 'Rejected' ? (
                 <div className="mt-8 space-y-3">
                   <div className="flex gap-3">
-                    <button className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+                    <button 
+                      onClick={handleApproveClaim}
+                      className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                    >
                         <CheckCircle2 size={18} /> Approve Claim (Process Credit)
                     </button>
-                    <button className="flex-1 py-3 border-2 border-rose-500 text-rose-500 rounded-lg font-bold text-sm hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
+                    <button 
+                      onClick={handleRejectClaim}
+                      className="flex-1 py-3 border-2 border-rose-500 text-rose-500 rounded-lg font-bold text-sm hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
+                    >
                         <XCircle size={18} /> Reject Claim
                     </button>
                   </div>
@@ -361,7 +425,11 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
               ) : (
                 <div className="mt-8 bg-slate-50 p-6 rounded-xl border border-slate-100 flex items-center gap-4">
                   <ShieldAlert className="text-slate-400" size={24} />
-                  <p className="text-sm text-slate-500 italic">Claims must be approved by a Crates Manager before being finalized for the supplier.</p>
+                  <p className="text-sm text-slate-500 italic">
+                    {selectedClaim.status === 'Accepted' ? 'This claim has been approved and finalized.' : 
+                     selectedClaim.status === 'Rejected' ? 'This claim has been rejected.' :
+                     'Claims must be approved by a Crates Manager before being finalized for the supplier.'}
+                  </p>
                 </div>
               )}
             </div>

@@ -76,10 +76,10 @@ const BatchTracker: React.FC = () => {
     fetchData();
   }, []);
 
-  const currentBatch = batches.find(b => b.id === selectedBatchId);
-  const currentTraces = traces.filter(t => t.batch_id === selectedBatchId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const currentBatch = batches.find(b => String(b.id) === String(selectedBatchId));
+  const currentTraces = traces.filter(t => String(t.batch_id) === String(selectedBatchId)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const asset = assetsMaster.find(a => a.id === currentBatch?.asset_id);
-  const thaan = thaans.find(t => t.batch_id === selectedBatchId);
+  const thaan = thaans.find(t => String(t.batch_id) === String(selectedBatchId));
 
   const handleUploadThaan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

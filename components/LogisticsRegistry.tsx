@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Truck as TruckIcon, User, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin, Edit2, X, Loader2, Paperclip, Eye } from 'lucide-react';
+import { Truck as TruckIcon, User as UserIcon, Plus, Trash2, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Calendar, MapPin, Edit2, X, Loader2, Paperclip, Eye } from 'lucide-react';
 import { supabase, isSupabaseConfigured, uploadFleetDocument, getSignedFleetDocumentUrl } from '../supabase';
 import { Truck, Driver, Branch } from '../types';
 import BranchSelector from './BranchSelector';
@@ -262,7 +262,7 @@ const LogisticsRegistry: React.FC = () => {
               <TruckIcon size={18} /> ADD TRUCK
             </button>
             <button onClick={() => setIsAddingDriver(true)} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200">
-              <User size={18} /> ADD DRIVER
+              <UserIcon size={18} /> ADD DRIVER
             </button>
           </div>
         </div>
@@ -427,7 +427,7 @@ const LogisticsRegistry: React.FC = () => {
               <div key={d.id} className="px-8 py-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white transition-colors">
-                    <User size={20} />
+                    <UserIcon size={20} />
                   </div>
                   <div>
                     <p className="font-black text-slate-900 leading-none">{d.full_name}</p>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Search, Loader2, Package, Truck, User, MapPin, Calendar, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Search, Loader2, Package, Truck, User as UserIcon, MapPin, Calendar, ArrowLeft, ArrowRight } from 'lucide-react';
 
 const ForensicTable: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
@@ -129,7 +129,7 @@ const ForensicTable: React.FC = () => {
                           <Truck size={12} className="text-slate-300" /> {item?.last_moved_by_truck || 'N/A'}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                          <User size={12} className="text-slate-300" /> {item?.last_moved_by_driver || 'N/A'}
+                          <UserIcon size={12} className="text-slate-300" /> {item?.last_moved_by_driver || 'N/A'}
                         </div>
                       </div>
                     </td>

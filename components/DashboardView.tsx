@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User, History, UserCheck, Skull, MapPin, Loader2, Info } from 'lucide-react';
+import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User as UserIcon, History as HistoryIcon, UserCheck, Skull, MapPin, Loader2, Info } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
 import { LocationType, UserRole, User as UserType, Batch, AssetLoss, Location, User as DBUser, AssetMaster, Claim } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -60,6 +60,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             status: item.batch_status,
             daily_accrued_liability: item.daily_accrued_liability,
             daily_rental_fee: item.daily_rental_fee,
+            days_in_circulation: item.days_in_circulation,
             created_at: item.transaction_date,
             transaction_date: item.transaction_date
           }));
@@ -137,12 +138,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
   const avgTurnaround = useMemo(() => {
     if (filteredBatches.length === 0) return 0;
-    const now = new Date().getTime();
-    const totalDays = filteredBatches.reduce((acc, b) => {
-      const created = new Date(b?.created_at || Date.now()).getTime();
-      const diff = (now - created) / (1000 * 60 * 60 * 24);
-      return acc + diff;
-    }, 0);
+    const totalDays = filteredBatches.reduce((acc, b: any) => acc + (b?.days_in_circulation || 0), 0);
     return totalDays / filteredBatches.length;
   }, [filteredBatches]);
 
@@ -354,7 +350,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:border-blue-100 transition-colors">
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <div className="flex items-center gap-2">
-               <History size={16} className="text-blue-500" />
+               <HistoryIcon size={16} className="text-blue-500" />
                <h3 className="font-bold text-slate-800 uppercase tracking-widest text-[11px]">Branch Operations Manifest</h3>
             </div>
             <button className="text-[10px] text-blue-600 font-black uppercase tracking-widest hover:underline">View All</button>

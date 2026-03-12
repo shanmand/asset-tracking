@@ -15,7 +15,8 @@ import {
   Users,
   Database,
   Loader2,
-  ArrowRight
+  ArrowRight,
+  History as HistoryIcon
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType, LogisticsTrace } from '../types';
@@ -108,13 +109,22 @@ const ReportsView: React.FC = () => {
     }, {});
 
     // Trace Stats
-    const traceData = traces.filter(t => selectedBranch === 'all' || t.custodian_branch_id === selectedBranch);
+    const traceData = traces.filter(t => {
+      const matchesBranch = selectedBranch === 'all' || t.custodian_branch_id === selectedBranch;
+      const matchesSearch = !searchQuery || 
+                           String(t.batch_id).toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           t.driver_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           t.to_location_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           t.truck_plate?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesBranch && matchesSearch;
+    });
     
     // Get latest condition for each batch at each location - Optimized
     const latestTraceByBatch: Record<string, LogisticsTrace> = {};
     for (const t of traceData) {
-      if (!latestTraceByBatch[t.batch_id] || new Date(t.timestamp).getTime() > new Date(latestTraceByBatch[t.batch_id].timestamp).getTime()) {
-        latestTraceByBatch[t.batch_id] = t;
+      const bId = String(t.batch_id);
+      if (!latestTraceByBatch[bId] || new Date(t.timestamp).getTime() > new Date(latestTraceByBatch[bId].timestamp).getTime()) {
+        latestTraceByBatch[bId] = t;
       }
     }
 
@@ -367,7 +377,7 @@ const ReportsView: React.FC = () => {
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-            <History size={18} className="text-emerald-500" />
+            <HistoryIcon size={18} className="text-emerald-500" />
             <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Custodian Branch Condition Report</h3>
           </div>
           <div className="overflow-x-auto">

@@ -6,7 +6,7 @@ import {
   AlertTriangle, 
   ShieldAlert, 
   Truck, 
-  User, 
+  User as UserIcon, 
   Calendar, 
   Download, 
   ChevronRight, 
@@ -286,7 +286,7 @@ const ManagementReportPack: React.FC = () => {
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Driver Renewals</p>
                   <p className="font-black text-slate-900">R {(reportStats.complianceCost * 0.1).toLocaleString()}</p>
                 </div>
-                <User size={24} className="text-slate-200" />
+                <UserIcon size={24} className="text-slate-200" />
               </div>
             </div>
             <div className="pt-6 border-t border-slate-100">
@@ -325,7 +325,7 @@ const ManagementReportPack: React.FC = () => {
               {reportStats.redListDrivers.map(d => (
                 <div key={d.id} className="px-10 py-4 flex justify-between items-center">
                   <div className="flex items-center gap-4">
-                    <User size={18} className="text-rose-500" />
+                    <UserIcon size={18} className="text-rose-500" />
                     <span className="font-black text-slate-900 text-sm">{d.full_name}</span>
                   </div>
                   <span className="text-[10px] font-black text-rose-600 uppercase bg-rose-50 px-3 py-1 rounded-lg">Expired License</span>

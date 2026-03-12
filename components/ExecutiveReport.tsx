@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Award, TrendingDown, Clock, ShieldAlert, User, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
+import { Award, TrendingDown, Clock, ShieldAlert, User as UserIcon, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
 import { LocationType, Batch, BatchMovement, Location, Truck, Driver, FeeSchedule, AssetMaster } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -201,7 +201,7 @@ const ExecutiveReport: React.FC = () => {
                       <div>
                         <p className="text-[9px] text-slate-400 uppercase font-bold">Responsible Driver</p>
                         <p className="text-xs font-bold flex items-center gap-1.5">
-                           <User size={10} className="text-emerald-400" /> {bp.forensics.driver}
+                           <UserIcon size={10} className="text-emerald-400" /> {bp.forensics.driver}
                         </p>
                       </div>
                       <button className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-[10px] font-black uppercase rounded-lg transition-colors">
