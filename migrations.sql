@@ -298,10 +298,36 @@ BEGIN
     END IF;
 
     -- 2. Ensure it exists in business_parties (as requested)
-    -- Since business_parties uses UUID, we check by name to see if it's already there
-    IF NOT EXISTS (SELECT 1 FROM public.business_parties WHERE name = p_supplier_id AND party_type = 'Supplier') THEN
-        INSERT INTO public.business_parties (name, party_type)
-        VALUES (p_supplier_id, 'Supplier');
+    -- Update: business_parties now uses TEXT ID to match locations
+    IF NOT EXISTS (SELECT 1 FROM public.business_parties WHERE id = p_supplier_id) THEN
+        INSERT INTO public.business_parties (id, name, party_type)
+        VALUES (p_supplier_id, p_supplier_id, 'Supplier');
     END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 10. Business Directory View & Schema Update
+-- Change business_parties ID to TEXT to support human-readable IDs
+ALTER TABLE public.business_parties ALTER COLUMN id TYPE TEXT;
+ALTER TABLE public.business_parties ALTER COLUMN id DROP DEFAULT;
+
+DROP VIEW IF EXISTS public.vw_business_directory;
+CREATE OR REPLACE VIEW public.vw_business_directory AS
+SELECT 
+    bp.id,
+    bp.name,
+    bp.party_type,
+    COALESCE(asset_counts.type_count, 0) as asset_types,
+    COALESCE(stock_counts.total_stock, 0) as current_stock
+FROM public.business_parties bp
+LEFT JOIN (
+    SELECT supplier_id, count(*) as type_count
+    FROM public.asset_master
+    GROUP BY supplier_id
+) asset_counts ON bp.id = asset_counts.supplier_id
+LEFT JOIN (
+    SELECT am.supplier_id, sum(b.quantity) as total_stock
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    GROUP BY am.supplier_id
+) stock_counts ON bp.id = stock_counts.supplier_id;

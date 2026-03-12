@@ -58,6 +58,7 @@ import StockTakeModule from './components/StockTakeModule';
 import SettlementModule from './components/SettlementModule';
 import LiabilityHeatmap from './components/LiabilityHeatmap';
 import PersonnelManagement from './components/PersonnelManagement';
+import BusinessDirectory from './components/BusinessDirectory';
 import ShiftManagement from './components/ShiftManagement';
 import FleetCompliance from './components/FleetCompliance';
 import FleetExpenseReport from './components/FleetExpenseReport';
@@ -95,7 +96,8 @@ enum NavItem {
   COMPLIANCE = 'compliance',
   FLEET_REPORT = 'fleet-report',
   DRIVER_PORTAL = 'driver-portal',
-  MANAGEMENT_REPORT = 'management-report'
+  MANAGEMENT_REPORT = 'management-report',
+  BUSINESS_DIRECTORY = 'business-directory'
 }
 
 const AppContent: React.FC = () => {
@@ -151,6 +153,7 @@ const AppContent: React.FC = () => {
       case NavItem.FLEET_REPORT: return <FleetExpenseReport />;
       case NavItem.DRIVER_PORTAL: return <DriverPortal />;
       case NavItem.MANAGEMENT_REPORT: return <ManagementReportPack />;
+      case NavItem.BUSINESS_DIRECTORY: return <BusinessDirectory />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -188,6 +191,7 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.FINANCE_SETTLEMENT} onClick={() => setActiveTab(NavItem.FINANCE_SETTLEMENT)} icon={<Receipt size={18} />} label="Finance Settlement" />
           <SidebarButton active={activeTab === NavItem.LIABILITY_HEATMAP} onClick={() => setActiveTab(NavItem.LIABILITY_HEATMAP)} icon={<Flame size={18} />} label="Liability Heatmap" />
           <SidebarButton active={activeTab === NavItem.ASSETS} onClick={() => setActiveTab(NavItem.ASSETS)} icon={<Tags size={18} />} label="Asset Registry" />
+          <SidebarButton active={activeTab === NavItem.BUSINESS_DIRECTORY} onClick={() => setActiveTab(NavItem.BUSINESS_DIRECTORY)} icon={<Building2 size={18} />} label="Business Directory" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">System</div>
           <SidebarButton active={activeTab === NavItem.COMPLIANCE} onClick={() => setActiveTab(NavItem.COMPLIANCE)} icon={<ShieldCheck size={18} />} label="Fleet Compliance" />
