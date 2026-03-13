@@ -209,7 +209,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredLosses.slice(0, 3).map(loss => {
                 const batch = displayBatches.find(b => b?.id === loss?.batch_id);
-                const reporter = displayUsers.find(u => u?.id === loss?.reported_by);
                 const riskLevel = (loss?.lost_quantity || 0) > 20 ? 'CRITICAL' : 'MODERATE';
                 const location = displayLocations.find(l => l?.id === loss?.last_known_location_id);
                 
@@ -230,11 +229,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                        <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                              <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center border-4 border-white shadow-lg group-hover:scale-110 transition-transform">
-                                <span className="text-xs font-black text-white">{reporter?.name?.charAt(0) || 'U'}</span>
+                                <span className="text-xs font-black text-white">{(loss?.reported_by || 'U').charAt(0).toUpperCase()}</span>
                              </div>
                              <div>
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Reporter</p>
-                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{reporter?.name || 'Supabase User'}</p>
+                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{loss?.reported_by || 'System'}</p>
                              </div>
                           </div>
                           <div className="text-right">

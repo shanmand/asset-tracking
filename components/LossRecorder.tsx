@@ -141,6 +141,10 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         const batch = batches.find(b => b.id === selectedBatchId);
         if (!batch) throw new Error("Batch not found");
 
+        // Fetch current user session for email
+        const { data: { user } } = await supabase.auth.getUser();
+        const reporterEmail = user?.email || currentUser.id;
+
         // 1. Close modal immediately to prevent re-render hang
         setIsModalOpen(false);
 
@@ -148,7 +152,7 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
         const { error } = await supabase.rpc('process_partial_loss', {
           p_batch_id: selectedBatchId,
           p_lost_quantity: lostQty,
-          p_reported_by: currentUser.id,
+          p_reported_by: reporterEmail,
           p_notes: notes,
           p_location_id: lastKnown?.locationId || batch.current_location_id
         });
