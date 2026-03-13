@@ -192,8 +192,8 @@ CREATE TABLE public.batches (
 CREATE TABLE public.batch_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     batch_id TEXT REFERENCES public.batches(id),
-    from_location_id TEXT REFERENCES public.locations(id),
-    to_location_id TEXT REFERENCES public.locations(id),
+    from_location_id TEXT, -- Relaxed to accept both locations and business parties
+    to_location_id TEXT,   -- Relaxed to accept both locations and business parties
     truck_id TEXT REFERENCES public.trucks(id),
     driver_id TEXT REFERENCES public.drivers(id),
     condition TEXT DEFAULT 'Clean',
@@ -287,6 +287,37 @@ CREATE TABLE public.tasks (
     task_type TEXT DEFAULT 'General', -- General, Stock Take
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE public.collection_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id TEXT NOT NULL,
+    asset_id TEXT REFERENCES public.asset_master(id),
+    estimated_quantity INTEGER NOT NULL,
+    preferred_pickup_date DATE NOT NULL,
+    contact_person TEXT,
+    contact_number TEXT,
+    status TEXT DEFAULT 'Pending', -- Pending, Assigned, Completed, Cancelled
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE OR REPLACE VIEW public.vw_pending_collections AS
+SELECT 
+    cr.id,
+    cr.customer_id,
+    COALESCE(l.name, bp.name) as customer_name,
+    cr.asset_id,
+    am.name as asset_name,
+    cr.estimated_quantity,
+    cr.preferred_pickup_date,
+    cr.contact_person,
+    cr.contact_number,
+    cr.status,
+    cr.created_at
+FROM public.collection_requests cr
+LEFT JOIN public.locations l ON cr.customer_id = l.id
+LEFT JOIN public.business_parties bp ON cr.customer_id = bp.id::text
+JOIN public.asset_master am ON cr.asset_id = am.id
+WHERE cr.status = 'Pending';
 
 CREATE TABLE public.stock_takes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -797,14 +828,53 @@ FROM public.truck_roadworthy_history rh
 JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
+CREATE OR REPLACE VIEW public.vw_all_origins AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    name || ' (' || partner_type || ')' as display_name,
+    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+FROM public.locations
+WHERE type != 'In Transit'
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties
+ORDER BY sort_group ASC, name ASC;
+
 CREATE OR REPLACE VIEW public.vw_movement_destinations AS
 SELECT 
     id,
     name,
     partner_type,
-    name || ' (' || partner_type || ')' as display_name
+    name || ' (' || partner_type || ')' as display_name,
+    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
 FROM public.locations
-WHERE partner_type IN ('Customer', 'Supplier');
+WHERE partner_type IN ('Customer', 'Supplier')
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties
+ORDER BY sort_group ASC, name ASC;
+
+INSERT INTO public.business_parties (name, party_type) VALUES 
+('CHEP South Africa', 'Supplier'),
+('Pick n Pay Distribution', 'Customer')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.collection_requests (customer_id, asset_id, estimated_quantity, preferred_pickup_date, contact_person, contact_number) VALUES 
+('LOC-CUST-01', 'SH-001', 150, CURRENT_DATE + INTERVAL '1 day', 'John Doe', '011-555-0123'),
+('Pick n Pay Distribution', 'SH-001', 300, CURRENT_DATE + INTERVAL '2 days', 'Jane Smith', '011-555-0456')
+ON CONFLICT DO NOTHING;
 
 -- 18. Management Reporting Views
 CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS

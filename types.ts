@@ -260,6 +260,20 @@ export interface ThaanSlip {
   signed_at: string | null;
 }
 
+export interface CollectionRequest {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  asset_id: string;
+  asset_name?: string;
+  estimated_quantity: number;
+  preferred_pickup_date: string;
+  contact_person?: string;
+  contact_number?: string;
+  status: 'Pending' | 'Assigned' | 'Completed' | 'Cancelled';
+  created_at: string;
+}
+
 export interface Claim {
   id: string;
   batch_id: string;

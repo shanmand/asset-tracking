@@ -8,12 +8,19 @@ import { normalizePayload } from '../supabaseUtils';
 
 interface LogisticsOpsProps {
   currentUser: UserType;
+  initialCollectionRequest?: {
+    customerId: string;
+    assetId: string;
+    quantity: number;
+    requestId?: string;
+  };
 }
 
-const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
+const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollectionRequest }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
   
   const [locations, setLocations] = useState<Location[]>([]);
+  const [origins, setOrigins] = useState<MovementDestination[]>([]);
   const [destinations, setDestinations] = useState<MovementDestination[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
@@ -50,8 +57,9 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
     setIsLoading(true);
     try {
-      const [locsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
+      const [locsRes, originsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
         supabase.from('locations').select('*'),
+        supabase.from('vw_all_origins').select('*'),
         supabase.from('vw_movement_destinations').select('*'),
         supabase.from('batches').select('*'),
         supabase.from('trucks').select('*'),
@@ -63,13 +71,19 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
       if (locsRes.data) {
         setLocations(locsRes.data);
-        if (locsRes.data.length > 0) {
-          setOrigin(locsRes.data[0].id);
-          if (locsRes.data.length > 3) setDestination(locsRes.data[3].id);
-          else if (locsRes.data.length > 1) setDestination(locsRes.data[1].id);
+      }
+      if (originsRes.data) {
+        setOrigins(originsRes.data);
+        if (originsRes.data.length > 0) {
+          setOrigin(originsRes.data[0].id);
         }
       }
-      if (destsRes.data) setDestinations(destsRes.data);
+      if (destsRes.data) {
+        setDestinations(destsRes.data);
+        if (destsRes.data.length > 0) {
+          setDestination(destsRes.data[0].id);
+        }
+      }
       if (batchesRes.data) setBatches(batchesRes.data);
       if (trucksRes.data) {
         setTrucks(trucksRes.data);
@@ -93,6 +107,13 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   React.useEffect(() => {
     fetchData();
   }, []);
+
+  React.useEffect(() => {
+    if (initialCollectionRequest) {
+      setOrigin(initialCollectionRequest.customerId);
+      setAssets([{ assetId: initialCollectionRequest.assetId, quantity: initialCollectionRequest.quantity }]);
+    }
+  }, [initialCollectionRequest]);
 
   const handleAddAsset = () => !isReadOnly && assetsMaster.length > 0 && setAssets([...assets, { assetId: assetsMaster[0].id, quantity: 0 }]);
   const handleRemoveAsset = (index: number) => !isReadOnly && setAssets(assets.filter((_, i) => i !== index));
@@ -238,6 +259,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
       }
 
       setNotification({ message: "Manifest logged & batches updated successfully.", type: 'success' });
+      
+      // If this was from a collection request, mark it as completed
+      if (initialCollectionRequest?.requestId) {
+        await supabase
+          .from('collection_requests')
+          .update({ status: 'Completed' })
+          .eq('id', initialCollectionRequest.requestId);
+      }
+
       if (assetsMaster.length > 0) {
         setAssets([{ assetId: assetsMaster[0].id, quantity: 0 }]);
       }
@@ -310,7 +340,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     value={origin}
                     onChange={e => setOrigin(e.target.value)}
                   >
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {origins.map(o => <option key={o.id} value={o.id}>{o.display_name}</option>)}
                   </select>
                 </label>
                 <label className="block space-y-2">

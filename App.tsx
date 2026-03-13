@@ -41,6 +41,7 @@ import BatchTracker from './components/BatchTracker';
 import AssetList from './components/AssetList';
 import ClaimsManager from './components/ClaimsManager';
 import LogisticsOps from './components/LogisticsOps';
+import CollectionRequests from './components/CollectionRequests';
 import InventoryDashboard from './components/InventoryDashboard';
 import FinancialReport from './components/FinancialReport';
 import LossRecorder from './components/LossRecorder';
@@ -77,6 +78,7 @@ enum NavItem {
   ASSETS = 'assets',
   TRACKER = 'tracker',
   LOGISTICS = 'logistics',
+  COLLECTION_REQUESTS = 'collection-requests',
   LOSSES = 'losses',
   CLAIMS = 'claims',
   SCHEMA = 'schema',
@@ -106,6 +108,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
   const [preselectedStockTakeLocation, setPreselectedStockTakeLocation] = useState<string | undefined>(undefined);
+  const [pendingAssignment, setPendingAssignment] = useState<{customerId: string, assetId: string, quantity: number, requestId: string} | null>(null);
 
   const currentBranchContext = profile?.role_name === UserRole.MANAGER 
     ? (profile.home_branch_name.includes('JHB') ? 'Kya Sands' : 'Durban') 
@@ -132,7 +135,21 @@ const AppContent: React.FC = () => {
       case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.ASSETS: return <AssetList isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.TRACKER: return <BatchTracker />;
-      case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialCollectionRequest={pendingAssignment || undefined} />;
+      case NavItem.COLLECTION_REQUESTS: return (
+        <CollectionRequests 
+          currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} 
+          onAssign={(req) => {
+            setPendingAssignment({
+              customerId: req.customer_id,
+              assetId: req.asset_id,
+              quantity: req.estimated_quantity,
+              requestId: req.id
+            });
+            setActiveTab(NavItem.LOGISTICS);
+          }}
+        />
+      );
       case NavItem.LOSSES: return <LossRecorder currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.CLAIMS: return <ClaimsManager isManager={profile?.role_name === UserRole.MANAGER || profile?.role_name === UserRole.ADMIN} />;
       case NavItem.SCHEMA: return <SchemaView />;
@@ -173,7 +190,8 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.BATCH_MANAGEMENT} onClick={() => setActiveTab(NavItem.BATCH_MANAGEMENT)} icon={<ArrowDownToLine size={18} />} label="Inventory Intake" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Logistics</div>
-          <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => setActiveTab(NavItem.LOGISTICS)} icon={<ClipboardList size={18} />} label="Capture Movement" />
+          <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => { setPendingAssignment(null); setActiveTab(NavItem.LOGISTICS); }} icon={<ClipboardList size={18} />} label="Capture Movement" />
+          <SidebarButton active={activeTab === NavItem.COLLECTION_REQUESTS} onClick={() => setActiveTab(NavItem.COLLECTION_REQUESTS)} icon={<ArrowDownToLine size={18} />} label="Collection Requests" />
           <SidebarButton active={activeTab === NavItem.COMPLIANCE} onClick={() => setActiveTab(NavItem.COMPLIANCE)} icon={<ShieldCheck size={18} />} label="Fleet Readiness" />
           <SidebarButton active={activeTab === NavItem.REPORTS} onClick={() => setActiveTab(NavItem.REPORTS)} icon={<BarChart3 size={18} />} label="Logistics Intelligence" />
 
