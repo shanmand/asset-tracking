@@ -293,6 +293,8 @@ CREATE TABLE public.stock_takes (
     location_id TEXT REFERENCES public.locations(id),
     take_date DATE NOT NULL,
     performed_by UUID REFERENCES public.users(id),
+    counter_name TEXT,
+    status TEXT DEFAULT 'Pending Approval', -- Pending Approval, Approved, Rejected
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -301,9 +303,11 @@ CREATE TABLE public.stock_take_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     stock_take_id UUID REFERENCES public.stock_takes(id),
     asset_id TEXT REFERENCES public.asset_master(id),
+    batch_id TEXT REFERENCES public.batches(id),
     system_quantity INTEGER NOT NULL,
     physical_count INTEGER NOT NULL,
     variance INTEGER NOT NULL,
+    comments TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -471,7 +475,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-CREATE OR REPLACE FUNCTION process_stock_take(p_location_id TEXT, p_performed_by UUID, p_notes TEXT, p_items JSONB)
+CREATE OR REPLACE FUNCTION process_stock_take(p_location_id TEXT, p_performed_by UUID, p_take_date DATE, p_counter_name TEXT, p_notes TEXT, p_status TEXT, p_items JSONB)
 RETURNS UUID AS $$
 DECLARE
     v_stock_take_id UUID;
@@ -482,23 +486,70 @@ DECLARE
     v_asset_id TEXT;
     v_variance INTEGER;
     v_replacement_fee NUMERIC;
+    v_item_comments TEXT;
 BEGIN
-    INSERT INTO public.stock_takes (location_id, take_date, performed_by, notes) VALUES (p_location_id, CURRENT_DATE, p_performed_by, p_notes) RETURNING id INTO v_stock_take_id;
+    INSERT INTO public.stock_takes (location_id, take_date, performed_by, counter_name, status, notes) 
+    VALUES (p_location_id, p_take_date, p_performed_by, p_counter_name, p_status, p_notes) 
+    RETURNING id INTO v_stock_take_id;
+
     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
     LOOP
         v_batch_id := v_item->>'batch_id';
         v_physical_count := (v_item->>'physical_count')::INTEGER;
+        v_item_comments := v_item->>'comments';
+        
         SELECT quantity, asset_id INTO v_system_qty, v_asset_id FROM public.batches WHERE id = v_batch_id;
         v_variance := v_system_qty - v_physical_count;
-        INSERT INTO public.stock_take_items (stock_take_id, asset_id, system_quantity, physical_count, variance) VALUES (v_stock_take_id, v_asset_id, v_system_qty, v_physical_count, v_variance);
-        IF v_variance > 0 THEN
+        
+        INSERT INTO public.stock_take_items (stock_take_id, asset_id, batch_id, system_quantity, physical_count, variance, comments) 
+        VALUES (v_stock_take_id, v_asset_id, v_batch_id, v_system_qty, v_physical_count, v_variance, v_item_comments);
+        
+        -- Only apply adjustments if status is 'Approved'
+        IF p_status = 'Approved' AND v_variance > 0 THEN
             SELECT amount_zar INTO v_replacement_fee FROM public.fee_schedule WHERE asset_id = v_asset_id AND fee_type = 'Replacement Fee (Lost Equipment)' AND (effective_to IS NULL OR effective_to >= CURRENT_DATE) ORDER BY effective_from DESC LIMIT 1;
             UPDATE public.batches SET quantity = v_physical_count WHERE id = v_batch_id;
             INSERT INTO public.asset_losses (batch_id, loss_type, lost_quantity, last_known_location_id, reported_by, notes, transaction_date)
             VALUES (v_batch_id, 'Stock Take Variance', v_variance, p_location_id, p_performed_by, 'Stock Take ID: ' || v_stock_take_id::text || ' | Replacement Fee: R' || COALESCE(v_replacement_fee::text, '0.00'), CURRENT_DATE);
+        ELSIF p_status = 'Approved' AND v_variance < 0 THEN
+            -- Surplus adjustment
+            UPDATE public.batches SET quantity = v_physical_count WHERE id = v_batch_id;
         END IF;
     END LOOP;
     RETURN v_stock_take_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION approve_stock_take(p_stock_take_id UUID, p_approved_by UUID)
+RETURNS VOID AS $$
+DECLARE
+    v_item RECORD;
+    v_location_id TEXT;
+    v_replacement_fee NUMERIC;
+BEGIN
+    -- Update status
+    UPDATE public.stock_takes SET status = 'Approved' WHERE id = p_stock_take_id;
+    
+    SELECT location_id INTO v_location_id FROM public.stock_takes WHERE id = p_stock_take_id;
+
+    -- Apply adjustments
+    FOR v_item IN SELECT * FROM public.stock_take_items WHERE stock_take_id = p_stock_take_id
+    LOOP
+        IF v_item.variance > 0 THEN
+            SELECT amount_zar INTO v_replacement_fee FROM public.fee_schedule WHERE asset_id = v_item.asset_id AND fee_type = 'Replacement Fee (Lost Equipment)' AND (effective_to IS NULL OR effective_to >= CURRENT_DATE) ORDER BY effective_from DESC LIMIT 1;
+            UPDATE public.batches SET quantity = v_item.physical_count WHERE id = v_item.batch_id;
+            INSERT INTO public.asset_losses (batch_id, loss_type, lost_quantity, last_known_location_id, reported_by, notes, transaction_date)
+            VALUES (v_item.batch_id, 'Stock Take Variance', v_item.variance, v_location_id, p_approved_by, 'Approved Stock Take ID: ' || p_stock_take_id::text || ' | Replacement Fee: R' || COALESCE(v_replacement_fee::text, '0.00'), CURRENT_DATE);
+        ELSIF v_item.variance < 0 THEN
+            UPDATE public.batches SET quantity = v_item.physical_count WHERE id = v_item.batch_id;
+        END IF;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION reject_stock_take(p_stock_take_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.stock_takes SET status = 'Rejected' WHERE id = p_stock_take_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -747,6 +798,27 @@ JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
 -- 18. Management Reporting Views
+CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
+SELECT 
+    b.id AS batch_id,
+    b.asset_id,
+    a.name AS asset_name,
+    b.quantity,
+    b.current_location_id,
+    l.name AS current_location,
+    b.status AS batch_status,
+    b.transaction_date,
+    public.calculate_batch_accrual(b.id) AS daily_accrued_liability
+FROM public.batches b
+JOIN public.asset_master a ON b.asset_id = a.id
+JOIN public.locations l ON b.current_location_id = l.id;
+
+CREATE OR REPLACE FUNCTION approve_reconciliation(p_stock_take_id UUID, p_approved_by UUID)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM public.approve_stock_take(p_stock_take_id, p_approved_by);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE VIEW public.vw_management_kpis AS
 WITH batch_stats AS (
     SELECT 
@@ -794,5 +866,18 @@ SELECT
     b.transfer_confirmed_by_customer,
     public.calculate_batch_accrual(b.id) as accrued_amount
 FROM public.batches b;
+INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
+('SH-001', 'Daily Rental (Standard)', 5.50, '2026-01-01'),
 ('SH-P01', 'Replacement Fee (Lost Equipment)', 1200.00, '2026-01-01')
+ON CONFLICT DO NOTHING;
+
+-- Seed Disputed Batches & Claims
+INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date) VALUES 
+('B-DISP-001', 'SH-001', 50, 'LOC-CUST-01', 'Disputed', '2026-03-01'),
+('B-DISP-002', 'SH-P01', 10, 'LOC-CUST-01', 'Disputed', '2026-03-05')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.claims (id, batch_id, type, amount_claimed_zar, status) VALUES 
+('CLM-001', 'B-DISP-001', 'Damaged', 2500.00, 'Lodged'),
+('CLM-002', 'B-DISP-002', 'Dirty', 1200.00, 'Under Assessment')
 ON CONFLICT DO NOTHING;
