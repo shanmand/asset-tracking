@@ -829,41 +829,65 @@ JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
 CREATE OR REPLACE VIEW public.vw_all_origins AS
-SELECT 
-    id,
-    name,
-    partner_type,
-    name || ' (' || partner_type || ')' as display_name,
-    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
-FROM public.locations
-WHERE type != 'In Transit'
-UNION ALL
-SELECT 
-    id::text,
-    name,
-    party_type as partner_type,
-    name || ' (' || party_type || ')' as display_name,
-    2 as sort_group
-FROM public.business_parties
+WITH combined AS (
+    SELECT 
+        id,
+        name,
+        partner_type,
+        name || ' (' || partner_type || ')' as display_name,
+        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    FROM public.locations
+    WHERE type != 'In Transit'
+    UNION ALL
+    SELECT 
+        id::text,
+        name,
+        party_type as partner_type,
+        name || ' (' || party_type || ')' as display_name,
+        2 as sort_group
+    FROM public.business_parties
+)
+SELECT * FROM (
+    SELECT DISTINCT ON (id)
+        id,
+        name,
+        partner_type,
+        display_name,
+        sort_group
+    FROM combined
+    ORDER BY id, sort_group ASC
+) sub
 ORDER BY sort_group ASC, name ASC;
 
 CREATE OR REPLACE VIEW public.vw_movement_destinations AS
-SELECT 
-    id,
-    name,
-    partner_type,
-    name || ' (' || partner_type || ')' as display_name,
-    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
-FROM public.locations
-WHERE partner_type IN ('Customer', 'Supplier')
-UNION ALL
-SELECT 
-    id::text,
-    name,
-    party_type as partner_type,
-    name || ' (' || party_type || ')' as display_name,
-    2 as sort_group
-FROM public.business_parties
+WITH combined AS (
+    SELECT 
+        id,
+        name,
+        partner_type,
+        name || ' (' || partner_type || ')' as display_name,
+        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    FROM public.locations
+    WHERE partner_type IN ('Customer', 'Supplier')
+    UNION ALL
+    SELECT 
+        id::text,
+        name,
+        party_type as partner_type,
+        name || ' (' || party_type || ')' as display_name,
+        2 as sort_group
+    FROM public.business_parties
+)
+SELECT * FROM (
+    SELECT DISTINCT ON (id)
+        id,
+        name,
+        partner_type,
+        display_name,
+        sort_group
+    FROM combined
+    ORDER BY id, sort_group ASC
+) sub
 ORDER BY sort_group ASC, name ASC;
 
 INSERT INTO public.business_parties (name, party_type) VALUES 

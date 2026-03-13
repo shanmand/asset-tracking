@@ -109,11 +109,27 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
   }, []);
 
   React.useEffect(() => {
-    if (initialCollectionRequest) {
+    if (initialCollectionRequest && locations.length > 0) {
       setOrigin(initialCollectionRequest.customerId);
-      setAssets([{ assetId: initialCollectionRequest.assetId, quantity: initialCollectionRequest.quantity }]);
+      setIsInternal(false);
+      
+      // Pre-fill destination to the first Home location
+      const homeLoc = locations.find(l => l.category === 'Home');
+      if (homeLoc) setDestination(homeLoc.id);
+
+      // Try to find a batch at the origin for this asset
+      const matchingBatch = batches.find(b => 
+        b.current_location_id === initialCollectionRequest.customerId && 
+        b.asset_id === initialCollectionRequest.assetId
+      );
+
+      setAssets([{ 
+        assetId: initialCollectionRequest.assetId, 
+        quantity: initialCollectionRequest.quantity,
+        batchId: matchingBatch?.id
+      }]);
     }
-  }, [initialCollectionRequest]);
+  }, [initialCollectionRequest, locations, batches]);
 
   const handleAddAsset = () => !isReadOnly && assetsMaster.length > 0 && setAssets([...assets, { assetId: assetsMaster[0].id, quantity: 0 }]);
   const handleRemoveAsset = (index: number) => !isReadOnly && setAssets(assets.filter((_, i) => i !== index));
