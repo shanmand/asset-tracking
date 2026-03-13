@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
-import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement } from '../types';
+import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { normalizePayload } from '../supabaseUtils';
 
@@ -14,6 +14,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
   
   const [locations, setLocations] = useState<Location[]>([]);
+  const [destinations, setDestinations] = useState<MovementDestination[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -49,8 +50,9 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
     setIsLoading(true);
     try {
-      const [locsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
+      const [locsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
         supabase.from('locations').select('*'),
+        supabase.from('vw_movement_destinations').select('*'),
         supabase.from('batches').select('*'),
         supabase.from('trucks').select('*'),
         supabase.from('drivers').select('*'),
@@ -67,6 +69,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
           else if (locsRes.data.length > 1) setDestination(locsRes.data[1].id);
         }
       }
+      if (destsRes.data) setDestinations(destsRes.data);
       if (batchesRes.data) setBatches(batchesRes.data);
       if (trucksRes.data) {
         setTrucks(trucksRes.data);
@@ -323,12 +326,16 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
                     <optgroup label="Internal Facilities">
                       {locations.filter(l => l.category === 'Home').map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </optgroup>
-                    <optgroup label="Customers & Partners">
-                      {locations.filter(l => l.category === 'External' && l.type !== LocationType.IN_TRANSIT).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                    </optgroup>
-                    <optgroup label="Trucks (In-Transit)">
-                      {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                    </optgroup>
+                    {!isInternal && (
+                      <>
+                        <optgroup label="Customers & Partners">
+                          {destinations.map(d => <option key={d.id} value={d.id}>{d.display_name}</option>)}
+                        </optgroup>
+                        <optgroup label="Trucks (In-Transit)">
+                          {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </optgroup>
+                      </>
+                    )}
                   </select>
                 </label>
               </div>
@@ -387,31 +394,39 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser }) => {
 
               {!isReadOnly && (
                 <>
-                  <div className={`p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6 transition-all ${isInternal ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
-                      <select 
-                        disabled={isInternal}
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
-                        value={truckId}
-                        onChange={e => setTruckId(e.target.value)}
-                      >
-                        <option value="">Select Truck</option>
-                        {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
-                      <select 
-                        disabled={isInternal}
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
-                        value={driverId}
-                        onChange={e => handleDriverChange(e.target.value)}
-                      >
-                        <option value="">Select Driver</option>
-                        {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
-                      </select>
-                    </div>
+                  <div className={`p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6 transition-all ${isInternal ? 'opacity-50 grayscale' : ''}`}>
+                    {!isInternal ? (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
+                          <select 
+                            disabled={isInternal}
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                            value={truckId}
+                            onChange={e => setTruckId(e.target.value)}
+                          >
+                            <option value="">Select Truck</option>
+                            {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
+                          <select 
+                            disabled={isInternal}
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                            value={driverId}
+                            onChange={e => handleDriverChange(e.target.value)}
+                          >
+                            <option value="">Select Driver</option>
+                            {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="md:col-span-2 flex items-center justify-center bg-white/50 rounded-xl border border-dashed border-blue-200 p-4">
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Internal Transfer: No Truck/Driver Required</p>
+                      </div>
+                    )}
                     <div className="space-y-2 pointer-events-auto opacity-100 grayscale-0">
                       <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><ClipboardList size={14} /> Movement Date</h4>
                       <input 

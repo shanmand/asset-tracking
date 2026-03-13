@@ -121,6 +121,13 @@ export interface Location {
   partner_type: PartnerType;
 }
 
+export interface MovementDestination {
+  id: string;
+  name: string;
+  partner_type: string;
+  display_name: string;
+}
+
 export interface Truck {
   id: string;
   plate_number: string;

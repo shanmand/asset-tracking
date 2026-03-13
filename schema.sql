@@ -797,6 +797,15 @@ FROM public.truck_roadworthy_history rh
 JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
+CREATE OR REPLACE VIEW public.vw_movement_destinations AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    name || ' (' || partner_type || ')' as display_name
+FROM public.locations
+WHERE partner_type IN ('Customer', 'Supplier');
+
 -- 18. Management Reporting Views
 CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
 SELECT 
