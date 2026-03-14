@@ -128,6 +128,15 @@ export interface MovementDestination {
   display_name: string;
 }
 
+export interface Source {
+  id: string;
+  name: string;
+  partner_type: string;
+  display_name: string;
+  sort_group: number;
+  branch_id?: string;
+}
+
 export interface Truck {
   id: string;
   plate_number: string;

@@ -3,12 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Package, Plus, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Database, ArrowDownToLine, Edit2, Trash2, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BranchSelector from './BranchSelector';
-import { Batch, AssetMaster, Location, LocationType } from '../types';
+import { Batch, AssetMaster, Location, LocationType, Source } from '../types';
 
 const BatchManagement: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
@@ -30,10 +30,10 @@ const BatchManagement: React.FC = () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
-      const [batchesRes, assetsRes, locsRes] = await Promise.all([
+      const [batchesRes, assetsRes, sourcesRes] = await Promise.all([
         supabase.from('batches').select('*'),
         supabase.from('asset_master').select('*'),
-        supabase.from('locations').select('*')
+        supabase.from('vw_all_sources').select('*')
       ]);
 
       if (batchesRes.data) setBatches(batchesRes.data);
@@ -41,9 +41,9 @@ const BatchManagement: React.FC = () => {
         setAssets(assetsRes.data);
         if (assetsRes.data.length > 0) setNewBatch(prev => ({ ...prev, asset_id: assetsRes.data[0].id }));
       }
-      if (locsRes.data) {
-        setLocations(locsRes.data);
-        if (locsRes.data.length > 0) setNewBatch(prev => ({ ...prev, current_location_id: locsRes.data[0].id }));
+      if (sourcesRes.data) {
+        setSources(sourcesRes.data);
+        if (sourcesRes.data.length > 0) setNewBatch(prev => ({ ...prev, current_location_id: sourcesRes.data[0].id }));
       }
     } catch (err: any) {
       console.error("Fetch error:", err);
@@ -92,7 +92,7 @@ const BatchManagement: React.FC = () => {
         id: '',
         asset_id: assets[0]?.id || '',
         quantity: 0,
-        current_location_id: locations[0]?.id || '',
+        current_location_id: sources[0]?.id || '',
         status: 'Success',
         created_at: new Date().toISOString().split('T')[0]
       });
@@ -239,21 +239,21 @@ const BatchManagement: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Initial Location</label>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Initial Source / Location</label>
               <select 
                 required
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
                 value={newBatch.current_location_id}
                 onChange={e => setNewBatch({...newBatch, current_location_id: e.target.value})}
               >
-                <option value="">Select Location</option>
-                {locations
-                  .filter(l => !selectedBranch || l.branch_id === selectedBranch)
-                  .map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)
+                <option value="">Select Source</option>
+                {sources
+                  .filter(s => !selectedBranch || !s.branch_id || s.branch_id === selectedBranch)
+                  .map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)
                 }
               </select>
-              {locations.length === 0 && (
-                <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No locations found. Add a location in the Admin Panel first.</p>
+              {sources.length === 0 && (
+                <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No sources found. Ensure locations and business parties are configured.</p>
               )}
             </div>
             <div className="space-y-2">
@@ -324,7 +324,7 @@ const BatchManagement: React.FC = () => {
                   <td className="px-8 py-5">
                      <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                         <Database size={14} className="text-slate-400" />
-                        {locations.find(l => l.id === batch.current_location_id)?.name || 'Unknown'}
+                        {sources.find(s => s.id === batch.current_location_id)?.name || batch.current_location_id || 'Unknown'}
                      </div>
                   </td>
                   <td className="px-8 py-5 text-[10px] font-bold text-slate-400 uppercase">

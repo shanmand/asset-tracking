@@ -901,6 +901,40 @@ INSERT INTO public.collection_requests (customer_id, asset_id, estimated_quantit
 ON CONFLICT DO NOTHING;
 
 -- 18. Management Reporting Views
+CREATE OR REPLACE VIEW public.vw_all_sources AS
+WITH combined AS (
+    SELECT 
+        id,
+        name,
+        partner_type,
+        name || ' (' || partner_type || ')' as display_name,
+        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    FROM public.locations
+    WHERE type != 'In Transit'
+    UNION ALL
+    SELECT 
+        id::text,
+        name,
+        party_type as partner_type,
+        name || ' (' || party_type || ')' as display_name,
+        2 as sort_group
+    FROM public.business_parties
+)
+SELECT * FROM (
+    SELECT DISTINCT ON (id)
+        id,
+        name,
+        partner_type,
+        display_name,
+        sort_group
+    FROM combined
+    ORDER BY id, sort_group ASC
+) sub
+ORDER BY sort_group ASC, name ASC;
+
+-- Relax foreign key on batches to allow business party IDs
+ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_current_location_id_fkey;
+
 CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
 SELECT 
     b.id AS batch_id,
@@ -908,13 +942,13 @@ SELECT
     a.name AS asset_name,
     b.quantity,
     b.current_location_id,
-    l.name AS current_location,
+    COALESCE(s.name, b.current_location_id) AS current_location,
     b.status AS batch_status,
     b.transaction_date,
     public.calculate_batch_accrual(b.id) AS daily_accrued_liability
 FROM public.batches b
 JOIN public.asset_master a ON b.asset_id = a.id
-JOIN public.locations l ON b.current_location_id = l.id;
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 CREATE OR REPLACE FUNCTION approve_reconciliation(p_stock_take_id UUID, p_approved_by UUID)
 RETURNS VOID AS $$
