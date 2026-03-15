@@ -39,10 +39,10 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser, initialL
       setIsLoading(true);
       try {
         const [locsRes, assetsRes] = await Promise.all([
-          supabase.from('locations').select('*').order('name'),
+          supabase.from('vw_all_sources').select('*').order('name'),
           supabase.from('asset_master').select('*')
         ]);
-        if (locsRes.data) setLocations(locsRes.data);
+        if (locsRes.data) setLocations(locsRes.data as any);
         if (assetsRes.data) setAssets(assetsRes.data);
       } catch (err) {
         console.error("StockTake Fetch Error:", err);

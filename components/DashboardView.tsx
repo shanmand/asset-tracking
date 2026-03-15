@@ -58,6 +58,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             quantity: item.quantity,
             current_location_id: item.current_location_id || item.current_location, // Fallback if ID not in view
             status: item.batch_status,
+            branch_id: item.branch_id,
             daily_accrued_liability: item.daily_accrued_liability,
             daily_rental_fee: item.daily_rental_fee,
             days_in_circulation: item.days_in_circulation,
@@ -107,10 +108,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     
     // Apply Branch Filter
     if (currentBranchId) {
-      base = base.filter(b => {
-        const loc = displayLocations.find(l => l?.id === b?.current_location_id || l?.name === b?.current_location_id);
-        return loc?.branch_id === currentBranchId;
-      });
+      base = base.filter(b => (b as any).branch_id === currentBranchId);
     }
 
     // Apply "Our Account" Logic

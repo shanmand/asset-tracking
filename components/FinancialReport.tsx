@@ -65,8 +65,8 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
       setIsLoading(true);
       try {
         const [bRes, lRes, fRes, tRes, aRes, lossRes, brRes] = await Promise.all([
-          supabase.from('batches').select('*'),
-          supabase.from('locations').select('*'),
+          supabase.from('vw_global_inventory_tracker').select('*'),
+          supabase.from('vw_all_sources').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('thaan_slips').select('*'),
           supabase.from('asset_master').select('*'),
@@ -74,8 +74,22 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
           supabase.from('branches').select('*')
         ]);
 
-        if (bRes.data) setBatches(bRes.data);
-        if (lRes.data) setLocations(lRes.data);
+        if (bRes.data) {
+          // Map view columns back to Batch type
+          const mapped = bRes.data.map((item: any) => ({
+            id: item.batch_id,
+            asset_id: item.asset_id,
+            quantity: item.quantity,
+            current_location_id: item.current_location_id,
+            branch_id: item.branch_id,
+            status: item.batch_status,
+            transaction_date: item.transaction_date,
+            daily_accrued_liability: item.daily_accrued_liability,
+            created_at: item.transaction_date
+          }));
+          setBatches(mapped as any);
+        }
+        if (lRes.data) setLocations(lRes.data as any);
         if (fRes.data) setFees(fRes.data);
         if (tRes.data) setThaans(tRes.data);
         if (aRes.data) setAssets(aRes.data);
@@ -144,11 +158,8 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
   };
 
   const branchBatches = useMemo(() => {
-    return batches.filter(batch => {
-      const loc = locations.find(l => l.id === batch.current_location_id);
-      return loc?.branch_id === selectedBranchId;
-    });
-  }, [batches, locations, selectedBranchId]);
+    return batches.filter(batch => (batch as any).branch_id === selectedBranchId);
+  }, [batches, selectedBranchId]);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

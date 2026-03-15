@@ -363,11 +363,152 @@ DROP VIEW IF EXISTS public.vw_intake_summary_report;
 CREATE OR REPLACE VIEW public.vw_intake_summary_report AS
 SELECT 
     date_trunc('week', bm.transaction_date)::date as week_starting,
-    fl.partner_type as source_type,
-    fl.name as source_name,
+    COALESCE(l.partner_type, bp.party_type) as source_type,
+    COALESCE(l.name, bp.name) as source_name,
     SUM(bm.quantity) as total_quantity
 FROM public.batch_movements bm
 JOIN public.locations tl ON bm.to_location_id = tl.id
-JOIN public.locations fl ON bm.from_location_id = fl.id
+LEFT JOIN public.locations l ON bm.from_location_id = l.id
+LEFT JOIN public.business_parties bp ON bm.from_location_id = bp.id::text
 WHERE tl.partner_type = 'Internal' -- Destination is us
 GROUP BY 1, 2, 3;
+
+-- ==========================================
+-- 14. Synchronize Views for Business Parties
+-- ==========================================
+
+-- Update vw_all_sources to include branch_id
+DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
+CREATE OR REPLACE VIEW public.vw_all_sources AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    branch_id,
+    name || ' (' || partner_type || ')' as display_name,
+    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+FROM public.locations
+WHERE type != 'In Transit'
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    NULL as branch_id,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties;
+
+-- Update vw_all_origins to be consistent
+DROP VIEW IF EXISTS public.vw_all_origins CASCADE;
+CREATE OR REPLACE VIEW public.vw_all_origins AS
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
+
+-- Update vw_movement_destinations to be consistent
+DROP VIEW IF EXISTS public.vw_movement_destinations CASCADE;
+CREATE OR REPLACE VIEW public.vw_movement_destinations AS
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
+
+-- Update vw_master_logistics_trace to support business parties
+DROP VIEW IF EXISTS public.vw_master_logistics_trace CASCADE;
+CREATE OR REPLACE VIEW public.vw_master_logistics_trace AS
+SELECT 
+    bm.id AS movement_id,
+    bm.batch_id,
+    bm.transaction_date,
+    bm.timestamp,
+    d.full_name AS driver_name,
+    COALESCE(bm.quantity, b.quantity) AS quantity,
+    s_to.name AS to_location_name,
+    s_to.id AS to_location_id,
+    s_from.name AS from_location_name,
+    t.plate_number AS truck_plate,
+    bm.condition,
+    s_to.branch_id AS custodian_branch_id
+FROM public.batch_movements bm
+JOIN public.batches b ON bm.batch_id = b.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id;
+
+-- Update vw_daily_burn_rate to support business parties
+DROP VIEW IF EXISTS public.vw_daily_burn_rate CASCADE;
+CREATE OR REPLACE VIEW public.vw_daily_burn_rate AS
+SELECT 
+    br.name AS branch_name, 
+    s.name AS location_name, 
+    s.id AS location_id, 
+    br.id AS branch_id, 
+    SUM(bt.quantity * fs.amount_zar) AS daily_burn_rate, 
+    COUNT(bt.id) AS batch_count, 
+    AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - bt.transaction_date))/86400) AS avg_duration_days
+FROM public.batches bt 
+JOIN public.vw_all_sources s ON bt.current_location_id = s.id 
+LEFT JOIN public.branches br ON s.branch_id = br.id 
+JOIN public.fee_schedule fs ON bt.asset_id = fs.asset_id
+WHERE bt.transfer_confirmed_by_customer = FALSE 
+  AND fs.effective_to IS NULL
+GROUP BY br.name, s.name, s.id, br.id;
+
+-- Update vw_location_unconfirmed_value to support business parties
+DROP VIEW IF EXISTS public.vw_location_unconfirmed_value CASCADE;
+CREATE OR REPLACE VIEW public.vw_location_unconfirmed_value AS
+SELECT 
+    s.id as location_id,
+    s.name as location_name,
+    s.branch_id,
+    SUM(b.quantity) as unit_count,
+    SUM(b.quantity * 450) as estimated_value_zar
+FROM public.batches b
+JOIN public.vw_all_sources s ON b.current_location_id = s.id
+WHERE b.transfer_confirmed_by_customer = false
+GROUP BY s.id, s.name, s.branch_id;
+
+-- Update vw_global_inventory_tracker to include branch_id
+DROP VIEW IF EXISTS public.vw_global_inventory_tracker CASCADE;
+CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
+SELECT 
+    b.id AS batch_id,
+    b.asset_id,
+    a.name AS asset_name,
+    b.quantity,
+    b.current_location_id,
+    s.name AS current_location,
+    s.branch_id,
+    b.status AS batch_status,
+    b.transaction_date,
+    public.calculate_batch_accrual(b.id) AS daily_accrued_liability
+FROM public.batches b
+JOIN public.asset_master a ON b.asset_id = a.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- Update vw_pending_collections to support business parties
+DROP VIEW IF EXISTS public.vw_pending_collections CASCADE;
+CREATE OR REPLACE VIEW public.vw_pending_collections AS
+SELECT 
+    cr.*,
+    s.name as customer_name,
+    am.name as asset_name
+FROM public.collection_requests cr
+LEFT JOIN public.vw_all_sources s ON cr.customer_id = s.id
+JOIN public.asset_master am ON cr.asset_id = am.id
+WHERE cr.status = 'Pending';
+
+-- Update vw_batch_accruals to include branch_id and current_location name
+DROP VIEW IF EXISTS public.vw_batch_accruals CASCADE;
+CREATE OR REPLACE VIEW public.vw_batch_accruals AS
+SELECT 
+    b.id as batch_id,
+    b.asset_id,
+    b.quantity,
+    b.current_location_id,
+    s.name as current_location,
+    s.branch_id,
+    b.transaction_date,
+    b.transfer_confirmed_by_customer,
+    public.calculate_batch_accrual(b.id) as accrued_amount
+FROM public.batches b
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;

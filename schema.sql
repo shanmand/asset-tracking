@@ -829,66 +829,12 @@ JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
 CREATE OR REPLACE VIEW public.vw_all_origins AS
-WITH combined AS (
-    SELECT 
-        id,
-        name,
-        partner_type,
-        name || ' (' || partner_type || ')' as display_name,
-        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
-    FROM public.locations
-    WHERE type != 'In Transit'
-    UNION ALL
-    SELECT 
-        id::text,
-        name,
-        party_type as partner_type,
-        name || ' (' || party_type || ')' as display_name,
-        2 as sort_group
-    FROM public.business_parties
-)
-SELECT * FROM (
-    SELECT DISTINCT ON (id)
-        id,
-        name,
-        partner_type,
-        display_name,
-        sort_group
-    FROM combined
-    ORDER BY id, sort_group ASC
-) sub
-ORDER BY sort_group ASC, name ASC;
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
 
 CREATE OR REPLACE VIEW public.vw_movement_destinations AS
-WITH combined AS (
-    SELECT 
-        id,
-        name,
-        partner_type,
-        name || ' (' || partner_type || ')' as display_name,
-        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
-    FROM public.locations
-    WHERE partner_type IN ('Customer', 'Supplier')
-    UNION ALL
-    SELECT 
-        id::text,
-        name,
-        party_type as partner_type,
-        name || ' (' || party_type || ')' as display_name,
-        2 as sort_group
-    FROM public.business_parties
-)
-SELECT * FROM (
-    SELECT DISTINCT ON (id)
-        id,
-        name,
-        partner_type,
-        display_name,
-        sort_group
-    FROM combined
-    ORDER BY id, sort_group ASC
-) sub
-ORDER BY sort_group ASC, name ASC;
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
 
 INSERT INTO public.business_parties (name, party_type) VALUES 
 ('CHEP South Africa', 'Supplier'),
@@ -907,6 +853,7 @@ WITH combined AS (
         id,
         name,
         partner_type,
+        branch_id,
         name || ' (' || partner_type || ')' as display_name,
         CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
     FROM public.locations
@@ -916,6 +863,7 @@ WITH combined AS (
         id::text,
         name,
         party_type as partner_type,
+        NULL as branch_id,
         name || ' (' || party_type || ')' as display_name,
         2 as sort_group
     FROM public.business_parties
@@ -925,6 +873,7 @@ SELECT * FROM (
         id,
         name,
         partner_type,
+        branch_id,
         display_name,
         sort_group
     FROM combined
@@ -942,7 +891,8 @@ SELECT
     a.name AS asset_name,
     b.quantity,
     b.current_location_id,
-    COALESCE(s.name, b.current_location_id) AS current_location,
+    s.name AS current_location,
+    s.branch_id,
     b.status AS batch_status,
     b.transaction_date,
     public.calculate_batch_accrual(b.id) AS daily_accrued_liability
