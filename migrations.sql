@@ -357,3 +357,17 @@ BEGIN
     WHERE id = p_batch_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 12. Batch Summary Report View
+DROP VIEW IF EXISTS public.vw_intake_summary_report;
+CREATE OR REPLACE VIEW public.vw_intake_summary_report AS
+SELECT 
+    date_trunc('week', bm.transaction_date)::date as week_starting,
+    fl.partner_type as source_type,
+    fl.name as source_name,
+    SUM(bm.quantity) as total_quantity
+FROM public.batch_movements bm
+JOIN public.locations tl ON bm.to_location_id = tl.id
+JOIN public.locations fl ON bm.from_location_id = fl.id
+WHERE tl.partner_type = 'Internal' -- Destination is us
+GROUP BY 1, 2, 3;

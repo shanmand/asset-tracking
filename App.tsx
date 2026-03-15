@@ -65,6 +65,7 @@ import FleetCompliance from './components/FleetCompliance';
 import FleetExpenseReport from './components/FleetExpenseReport';
 import DriverPortal from './components/DriverPortal';
 import ManagementReportPack from './components/ManagementReportPack';
+import BatchSummaryReport from './components/BatchSummaryReport';
 import { useBranches } from './useBranches';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
@@ -99,7 +100,8 @@ enum NavItem {
   FLEET_REPORT = 'fleet-report',
   DRIVER_PORTAL = 'driver-portal',
   MANAGEMENT_REPORT = 'management-report',
-  BUSINESS_DIRECTORY = 'business-directory'
+  BUSINESS_DIRECTORY = 'business-directory',
+  BATCH_SUMMARY_REPORT = 'batch-summary-report'
 }
 
 const AppContent: React.FC = () => {
@@ -171,6 +173,7 @@ const AppContent: React.FC = () => {
       case NavItem.DRIVER_PORTAL: return <DriverPortal />;
       case NavItem.MANAGEMENT_REPORT: return <ManagementReportPack />;
       case NavItem.BUSINESS_DIRECTORY: return <BusinessDirectory />;
+      case NavItem.BATCH_SUMMARY_REPORT: return <BatchSummaryReport />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -185,6 +188,7 @@ const AppContent: React.FC = () => {
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           <div className="pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Overview</div>
+          <SidebarButton active={activeTab === NavItem.BATCH_SUMMARY_REPORT} onClick={() => setActiveTab(NavItem.BATCH_SUMMARY_REPORT)} icon={<BarChart3 size={18} />} label="Batch Summary Report" />
           <SidebarButton active={activeTab === NavItem.DASHBOARD} onClick={() => setActiveTab(NavItem.DASHBOARD)} icon={<LayoutDashboard size={18} />} label="Dashboard" />
           <SidebarButton active={activeTab === NavItem.REPORTS} onClick={() => setActiveTab(NavItem.REPORTS)} icon={<BarChart3 size={18} />} label="Logistics Intelligence" />
           <SidebarButton active={activeTab === NavItem.MANAGEMENT_REPORT} onClick={() => setActiveTab(NavItem.MANAGEMENT_REPORT)} icon={<FileText size={18} />} label="Management Report Pack" />
