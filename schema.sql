@@ -179,7 +179,7 @@ CREATE TABLE public.batches (
     id TEXT PRIMARY KEY,
     asset_id TEXT REFERENCES public.asset_master(id),
     quantity INTEGER NOT NULL CHECK (quantity > 0),
-    current_location_id TEXT REFERENCES public.locations(id),
+    current_location_id TEXT, -- Relaxed to accept both locations and business parties
     status TEXT DEFAULT 'Pending', -- Pending, Success, Lost, In-Transit, Settled
     is_settled BOOLEAN DEFAULT FALSE,
     settled_at TIMESTAMPTZ,

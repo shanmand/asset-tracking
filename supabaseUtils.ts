@@ -24,7 +24,13 @@ export const normalizePayload = (payload: any): any => {
 
   const normalized: any = {};
   for (const key in payload) {
-    const value = payload[key];
+    let value = payload[key];
+    
+    // If value is an object with an 'id' property, extract the 'id'
+    if (value && typeof value === 'object' && 'id' in value && (key === 'id' || key.endsWith('_id'))) {
+      value = value.id;
+    }
+
     // Heuristic: if key ends with _id or is 'id', cast to string
     if (key === 'id' || key.endsWith('_id')) {
       normalized[key] = value !== null && value !== undefined ? String(value) : null;

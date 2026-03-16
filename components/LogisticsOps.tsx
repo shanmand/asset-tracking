@@ -163,8 +163,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
       if (!driverId) validationErrors.push("Please select a driver.");
     }
     
-    const destType = locations.find(l => l.id === destination)?.type;
-    if (destType === LocationType.AT_CUSTOMER && !thaanFile) {
+    const destSource = origins.find(s => s.id === destination) || destinations.find(s => s.id === destination);
+    const isDestCustomer = destSource?.partner_type === 'Customer';
+    const isDestInTransit = locations.find(l => l.id === destination)?.type === LocationType.IN_TRANSIT;
+
+    if (isDestCustomer && !thaanFile) {
       validationErrors.push("Customer delivery requires a THAAN Slip upload.");
     }
 
@@ -211,7 +214,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
               .from('batches')
               .update(normalizePayload({ 
                 current_location_id: destination,
-                status: destType === LocationType.IN_TRANSIT ? 'In-Transit' : 'Success',
+                status: isDestInTransit ? 'In-Transit' : 'Success',
                 transaction_date: movementDate
               }))
               .eq('id', item.batchId);

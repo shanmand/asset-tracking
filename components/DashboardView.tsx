@@ -43,7 +43,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         const [inventoryRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes, branchesRes] = await Promise.all([
           supabase.from('vw_global_inventory_tracker').select('*'),
           supabase.from('asset_losses').select('*'),
-          supabase.from('locations').select('*'),
+          supabase.from('vw_all_sources').select('*'),
           supabase.from('users').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('claims').select('*'),

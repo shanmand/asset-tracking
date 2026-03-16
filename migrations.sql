@@ -512,3 +512,39 @@ SELECT
     public.calculate_batch_accrual(b.id) as accrued_amount
 FROM public.batches b
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- ==========================================
+-- 15. Relax Foreign Key Constraints
+-- ==========================================
+
+DO $$ 
+DECLARE 
+    r RECORD;
+BEGIN
+    -- Drop all foreign key constraints on batches(current_location_id)
+    FOR r IN (
+        SELECT constraint_name 
+        FROM information_schema.key_column_usage 
+        WHERE table_name = 'batches' AND column_name = 'current_location_id'
+    ) LOOP
+        EXECUTE 'ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+
+    -- Drop all foreign key constraints on batch_movements(from_location_id)
+    FOR r IN (
+        SELECT constraint_name 
+        FROM information_schema.key_column_usage 
+        WHERE table_name = 'batch_movements' AND column_name = 'from_location_id'
+    ) LOOP
+        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+
+    -- Drop all foreign key constraints on batch_movements(to_location_id)
+    FOR r IN (
+        SELECT constraint_name 
+        FROM information_schema.key_column_usage 
+        WHERE table_name = 'batch_movements' AND column_name = 'to_location_id'
+    ) LOOP
+        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+END $$;

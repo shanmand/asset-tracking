@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Package, Plus, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Database, ArrowDownToLine, Edit2, Trash2, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BranchSelector from './BranchSelector';
-import { Batch, AssetMaster, Location, LocationType, Source } from '../types';
+import { Batch, AssetMaster, Source } from '../types';
+import { castId, normalizePayload } from '../supabaseUtils';
 
 const BatchManagement: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -12,7 +13,7 @@ const BatchManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
-  const [editForm, setEditForm] = useState({ quantity: 0, created_at: '' });
+  const [editForm, setEditForm] = useState({ quantity: 0, transaction_date: '' });
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<string>('');
@@ -23,7 +24,7 @@ const BatchManagement: React.FC = () => {
     quantity: 0,
     current_location_id: '',
     status: 'Success',
-    created_at: new Date().toISOString().split('T')[0]
+    transaction_date: new Date().toISOString().split('T')[0]
   });
 
   const fetchData = async () => {
@@ -31,19 +32,23 @@ const BatchManagement: React.FC = () => {
     setIsLoading(true);
     try {
       const [batchesRes, assetsRes, sourcesRes] = await Promise.all([
-        supabase.from('batches').select('*'),
-        supabase.from('asset_master').select('*'),
-        supabase.from('vw_all_sources').select('*')
+        supabase.from('batches').select('*').order('created_at', { ascending: false }),
+        supabase.from('asset_master').select('*').order('name'),
+        supabase.from('vw_all_sources').select('*').order('sort_group', { ascending: true }).order('name', { ascending: true })
       ]);
 
       if (batchesRes.data) setBatches(batchesRes.data);
       if (assetsRes.data) {
         setAssets(assetsRes.data);
-        if (assetsRes.data.length > 0) setNewBatch(prev => ({ ...prev, asset_id: assetsRes.data[0].id }));
+        if (assetsRes.data.length > 0 && !newBatch.asset_id) {
+          setNewBatch(prev => ({ ...prev, asset_id: assetsRes.data[0].id }));
+        }
       }
       if (sourcesRes.data) {
         setSources(sourcesRes.data);
-        if (sourcesRes.data.length > 0) setNewBatch(prev => ({ ...prev, current_location_id: sourcesRes.data[0].id }));
+        if (sourcesRes.data.length > 0 && !newBatch.current_location_id) {
+          setNewBatch(prev => ({ ...prev, current_location_id: sourcesRes.data[0].id }));
+        }
       }
     } catch (err: any) {
       console.error("Fetch error:", err);
@@ -74,29 +79,33 @@ const BatchManagement: React.FC = () => {
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
-        // If ID is empty, let DB generate or generate one
-        const payload = { ...newBatch };
-        if (!payload.id) payload.id = `B-${Math.floor(1000 + Math.random() * 9000)}`;
+        const batchId = newBatch.id.trim() || `B-${Math.floor(1000 + Math.random() * 9000)}`;
         
-        // Ensure created_at is a full ISO string if it's just a date
-        if (payload.created_at.length === 10) {
-          payload.created_at = new Date(payload.created_at).toISOString();
-        }
+        // Ensure we only pass string IDs
+        const payload = normalizePayload({
+          id: batchId,
+          asset_id: newBatch.asset_id,
+          quantity: newBatch.quantity,
+          current_location_id: newBatch.current_location_id,
+          status: newBatch.status,
+          transaction_date: newBatch.transaction_date
+        });
 
         const { error } = await supabase.from('batches').insert([payload]);
         if (error) throw error;
+        
+        setNotification({ msg: `Batch ${batchId} created successfully`, type: 'success' });
+        setIsAdding(false);
+        setNewBatch({
+          id: '',
+          asset_id: assets[0]?.id || '',
+          quantity: 0,
+          current_location_id: sources[0]?.id || '',
+          status: 'Success',
+          transaction_date: new Date().toISOString().split('T')[0]
+        });
+        fetchData();
       }
-      setNotification({ msg: `Batch ${newBatch.id || 'created'} successfully`, type: 'success' });
-      setIsAdding(false);
-      setNewBatch({
-        id: '',
-        asset_id: assets[0]?.id || '',
-        quantity: 0,
-        current_location_id: sources[0]?.id || '',
-        status: 'Success',
-        created_at: new Date().toISOString().split('T')[0]
-      });
-      fetchData();
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to create batch", type: 'error' });
     } finally {
@@ -109,7 +118,7 @@ const BatchManagement: React.FC = () => {
     setEditingBatch(batch);
     setEditForm({
       quantity: batch.quantity,
-      created_at: new Date(batch.created_at).toISOString().split('T')[0]
+      transaction_date: batch.transaction_date || new Date(batch.created_at).toISOString().split('T')[0]
     });
   };
 
@@ -118,11 +127,11 @@ const BatchManagement: React.FC = () => {
     if (!editingBatch) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.rpc('update_inventory_batch', {
+      const { error } = await supabase.rpc('update_inventory_batch', normalizePayload({
         p_batch_id: editingBatch.id,
         p_quantity: editForm.quantity,
-        p_date_received: new Date(editForm.created_at).toISOString()
-      });
+        p_date_received: editForm.transaction_date
+      }));
       if (error) throw error;
       setNotification({ msg: `Batch ${editingBatch.id} updated`, type: 'success' });
       setEditingBatch(null);
@@ -139,9 +148,9 @@ const BatchManagement: React.FC = () => {
     if (!confirm(`Are you sure you want to delete batch ${id}? This action cannot be undone.`)) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.rpc('delete_inventory_batch', {
+      const { error } = await supabase.rpc('delete_inventory_batch', normalizePayload({
         p_batch_id: id
-      });
+      }));
       if (error) throw error;
       setNotification({ msg: `Batch ${id} deleted`, type: 'success' });
       fetchData();
@@ -157,6 +166,11 @@ const BatchManagement: React.FC = () => {
     b.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     assets.find(a => a.id === b.asset_id)?.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const getSourceName = (id: string) => {
+    const source = sources.find(s => s.id === id);
+    return source ? source.name : id;
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -215,9 +229,6 @@ const BatchManagement: React.FC = () => {
                 <option value="">Select Asset</option>
                 {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
-              {assets.length === 0 && (
-                <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No assets found. Add an asset in the Asset Registry first.</p>
-              )}
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Quantity Received</label>
@@ -252,9 +263,6 @@ const BatchManagement: React.FC = () => {
                   .map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)
                 }
               </select>
-              {sources.length === 0 && (
-                <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase">No sources found. Ensure locations and business parties are configured.</p>
-              )}
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Intake Date</label>
@@ -262,16 +270,18 @@ const BatchManagement: React.FC = () => {
                 required
                 type="date"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                value={newBatch.created_at}
-                onChange={e => setNewBatch({...newBatch, created_at: e.target.value})}
+                value={newBatch.transaction_date}
+                onChange={e => setNewBatch({...newBatch, transaction_date: e.target.value})}
               />
             </div>
             <div className="lg:col-span-4 pt-4 border-t border-slate-100">
               <button 
                 type="submit"
-                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                disabled={isLoading}
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <ArrowDownToLine size={18} /> RECORD INTAKE & CREATE BATCH
+                {isLoading ? <RefreshCw className="animate-spin" size={18} /> : <ArrowDownToLine size={18} />}
+                RECORD INTAKE & CREATE BATCH
               </button>
             </div>
           </form>
@@ -300,7 +310,7 @@ const BatchManagement: React.FC = () => {
                 <th className="px-8 py-5">Asset Type</th>
                 <th className="px-8 py-5">Quantity</th>
                 <th className="px-8 py-5">Current Location</th>
-                <th className="px-8 py-5">Created At</th>
+                <th className="px-8 py-5">Transaction Date</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
@@ -324,11 +334,11 @@ const BatchManagement: React.FC = () => {
                   <td className="px-8 py-5">
                      <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                         <Database size={14} className="text-slate-400" />
-                        {sources.find(s => s.id === batch.current_location_id)?.name || batch.current_location_id || 'Unknown'}
+                        {getSourceName(batch.current_location_id)}
                      </div>
                   </td>
                   <td className="px-8 py-5 text-[10px] font-bold text-slate-400 uppercase">
-                    {new Date(batch.created_at).toLocaleDateString()}
+                    {batch.transaction_date ? new Date(batch.transaction_date).toLocaleDateString() : new Date(batch.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex justify-end gap-2">
@@ -350,7 +360,7 @@ const BatchManagement: React.FC = () => {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-8 py-20 text-center">
+                  <td colSpan={6} className="px-8 py-20 text-center">
                     <p className="text-sm font-bold text-slate-400">No batches recorded in the registry.</p>
                   </td>
                 </tr>
@@ -385,8 +395,8 @@ const BatchManagement: React.FC = () => {
                   required
                   type="date"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                  value={editForm.created_at}
-                  onChange={e => setEditForm({...editForm, created_at: e.target.value})}
+                  value={editForm.transaction_date}
+                  onChange={e => setEditForm({...editForm, transaction_date: e.target.value})}
                 />
               </div>
               <button 
