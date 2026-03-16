@@ -7,7 +7,13 @@ import { PostgrestResponse, PostgrestSingleResponse } from '@supabase/supabase-j
  */
 export const castId = (id: any): string => {
   if (id === null || id === undefined) return '';
-  return String(id);
+  if (typeof id === 'object' && id !== null) {
+    if ('id' in id) return String(id.id);
+    if ('batch_id' in id) return String(id.batch_id);
+    if ('uuid' in id) return String(id.uuid);
+  }
+  const str = String(id);
+  return str === '[object Object]' ? '' : str;
 };
 
 /**
@@ -33,7 +39,7 @@ export const normalizePayload = (payload: any): any => {
 
     // Heuristic: if key ends with _id or is 'id', cast to string
     if (key === 'id' || key.endsWith('_id')) {
-      normalized[key] = value !== null && value !== undefined ? String(value) : null;
+      normalized[key] = value !== null && value !== undefined ? castId(value) : null;
     } else if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
       normalized[key] = normalizePayload(value);
     } else {

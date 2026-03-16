@@ -4,7 +4,7 @@ import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle,
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
 import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { normalizePayload } from '../supabaseUtils';
+import { normalizePayload, castId } from '../supabaseUtils';
 
 interface LogisticsOpsProps {
   currentUser: UserType;
@@ -207,7 +207,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
 
             if (splitError) throw splitError;
             if (!newBatchId) throw new Error("Failed to generate new batch ID during split");
-            targetBatchId = String(newBatchId);
+            
+            targetBatchId = castId(newBatchId);
           } else {
             // Full Movement
             const { error: updateError } = await supabase
