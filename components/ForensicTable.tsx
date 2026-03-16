@@ -5,6 +5,7 @@ import { Search, Loader2, Package, Truck, User as UserIcon, MapPin, Calendar, Ar
 const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -50,8 +51,10 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
       console.log('Fetched results:', results, 'Count:', count);
       setData(results || []);
       setTotalCount(count || 0);
-    } catch (err) {
+      setFetchError(null);
+    } catch (err: any) {
       console.error("Forensic Fetch Error:", err);
+      setFetchError(err?.message || String(err));
     } finally {
       setIsLoading(false);
     }
@@ -140,7 +143,7 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
+                      {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
                     <td className="px-6 py-6"><div className="h-4 bg-slate-100 rounded w-24" /></td>
@@ -149,6 +152,12 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
                     <td className="px-6 py-6"><div className="h-4 bg-slate-100 rounded w-16 ml-auto" /></td>
                   </tr>
                 ))
+              ) : fetchError ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-20 text-center text-rose-500 italic text-sm font-bold uppercase tracking-widest">
+                    Error fetching forensic data: {fetchError}
+                  </td>
+                </tr>
               ) : data.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-20 text-center text-slate-400 italic text-sm font-bold uppercase tracking-widest">

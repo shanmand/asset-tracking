@@ -543,12 +543,6 @@ LEFT JOIN public.trucks t ON bm.truck_id = t.id;
 
 GRANT SELECT ON public.vw_batch_forensics TO authenticated;
 NOTIFY pgrst, 'reload schema';
-    s.branch_id,
-    b.transaction_date,
-    b.transfer_confirmed_by_customer,
-    public.calculate_batch_accrual(b.id) as accrued_amount
-FROM public.batches b
-LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- ==========================================
 -- 15. Relax Foreign Key Constraints
