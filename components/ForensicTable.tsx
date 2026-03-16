@@ -42,10 +42,11 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
 
       // 2. Branch Filter Logic (Handling 'Consolidated')
       // If 'Consolidated' is selected, we skip the eq filter to show everything
-      if (selectedBranchId && selectedBranchId !== 'Consolidated' && selectedBranchId !== '') {
-        query = query.eq('branch_id', selectedBranchId);
-        console.log('Applying branch filter:', selectedBranchId);
-      }
+      // Temporarily disabled for debugging
+      // if (selectedBranchId && selectedBranchId !== 'Consolidated' && selectedBranchId !== '') {
+      //   query = query.eq('branch_id', selectedBranchId);
+      //   console.log('Applying branch filter:', selectedBranchId);
+      // }
 
       // 3. Date Range Logic
       if (startDate) {
@@ -111,6 +112,7 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
                 setSearchQuery(e.target.value);
                 setPage(0);
               }}
+              name="search"
             />
           </div>
         </div>
