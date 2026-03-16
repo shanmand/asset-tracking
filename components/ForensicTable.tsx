@@ -13,6 +13,19 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_SIZE = 25;
 
+  // Debug: show key state values in the UI if no records are shown
+  const debugInfo = {
+    isSupabaseConfigured,
+    selectedBranchId,
+    searchQuery,
+    startDate,
+    endDate,
+    page,
+    totalCount,
+    dataLength: data.length,
+    fetchError,
+  };
+
   const fetchData = async () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
@@ -206,10 +219,15 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
           </table>
         </div>
         
-        <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+        <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 flex flex-col gap-3">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             Audit Ledger: {data.length} of {totalCount} Traceable Movements
           </p>
+          {(data.length === 0 || fetchError) && (
+            <pre className="text-[10px] text-slate-500 bg-white p-3 rounded-xl border border-slate-200 overflow-x-auto">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          )}
           <div className="flex gap-2">
             <button 
               disabled={page === 0 || isLoading}
