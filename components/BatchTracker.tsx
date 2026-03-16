@@ -8,7 +8,6 @@ import BatchFinancialDetailCard from './BatchFinancialDetailCard';
 import ForensicTable from './ForensicTable';
 
 const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchId }) => {
-  console.log('BatchTracker selectedBranchId:', selectedBranchId);
   const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
   const [thaans, setThaans] = useState<ThaanSlip[]>(isSupabaseConfigured ? [] : MOCK_THAANS);
   const [movements, setMovements] = useState<BatchMovement[]>(isSupabaseConfigured ? [] : MOCK_MOVEMENTS);
