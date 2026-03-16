@@ -16,6 +16,7 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
+      console.log('Fetching forensic data with filters:', { selectedBranchId, searchQuery, startDate, endDate, page });
       let query = supabase
         .from('vw_batch_forensics')
         .select('*', { count: 'exact' });
@@ -27,9 +28,11 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
 
       // 2. Branch Filter Logic (Handling 'Consolidated')
       // If 'Consolidated' is selected, we skip the eq filter to show everything
-      if (selectedBranchId && selectedBranchId !== 'Consolidated' && selectedBranchId !== '') {
-        query = query.eq('branch_id', selectedBranchId);
-      }
+      // TEMPORARILY DISABLED FOR DEBUGGING
+      // if (selectedBranchId && selectedBranchId !== 'Consolidated' && selectedBranchId !== '') {
+      //   query = query.eq('branch_id', selectedBranchId);
+      //   console.log('Applying branch filter:', selectedBranchId);
+      // }
 
       // 3. Date Range Logic
       if (startDate) {
@@ -45,6 +48,7 @@ const ForensicTable = ({ selectedBranchId, onSelectBatch }) => {
         .order('movement_id', { ascending: false });
 
       if (error) throw error;
+      console.log('Fetched results:', results, 'Count:', count);
       setData(results || []);
       setTotalCount(count || 0);
     } catch (err) {
