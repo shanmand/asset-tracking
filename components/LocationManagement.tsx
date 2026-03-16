@@ -552,7 +552,7 @@ const LocationManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {branches.map(branch => (
-                <tr key={branch.id} className="hover:bg-slate-50/50 transition-colors group">
+                <tr key={`branch-${branch.id}`} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-8 py-5 font-bold text-slate-900">{branch.id}</td>
                   <td className="px-8 py-5 font-bold text-slate-700">{branch.name}</td>
                   <td className="px-8 py-5 text-right">
@@ -618,7 +618,7 @@ const LocationManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredLocations.map(loc => (
-                <tr key={loc.id} className="hover:bg-slate-50/50 transition-colors group">
+                <tr key={`loc-${loc.id}`} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border shadow-inner font-black text-lg group-hover:bg-white transition-colors ${

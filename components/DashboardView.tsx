@@ -211,7 +211,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                 const location = displayLocations.find(l => l?.id === loss?.last_known_location_id);
                 
                 return (
-                  <div key={loss?.id} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
+                  <div key={`loss-${loss?.id}`} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
                     <div className="relative z-10">
                        <div className="flex justify-between items-start mb-4">
                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${riskLevel === 'CRITICAL' ? 'bg-rose-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'}`}>
@@ -356,7 +356,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             {filteredBatches.map((batch, i) => {
               const loc = displayLocations.find(l => l?.id === batch?.current_location_id || l?.name === batch?.current_location_id);
               return (
-                <div key={batch?.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
+                <div key={`batch-${batch?.id}`} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
                   <div className="flex items-center gap-4">
                     <div className={`p-2.5 rounded-xl shadow-sm group-hover/row:scale-110 transition-transform ${batch?.status === 'In-Transit' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
                       {batch?.status === 'In-Transit' ? <Truck size={20} /> : <Package size={20} />}

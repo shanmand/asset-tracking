@@ -394,7 +394,7 @@ const LogisticsRegistry: React.FC = () => {
           </div>
           <div className="divide-y divide-slate-50">
             {trucks.map(t => (
-              <div key={t.id} className="px-8 py-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
+              <div key={`truck-${t.id}`} className="px-8 py-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white transition-colors">
                     <TruckIcon size={20} />
@@ -424,7 +424,7 @@ const LogisticsRegistry: React.FC = () => {
           </div>
           <div className="divide-y divide-slate-50">
             {drivers.map(d => (
-              <div key={d.id} className="px-8 py-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
+              <div key={`driver-${d.id}`} className="px-8 py-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white transition-colors">
                     <UserIcon size={20} />

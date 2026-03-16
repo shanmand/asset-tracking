@@ -157,7 +157,7 @@ const BusinessDirectory: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredPartners.map(partner => (
-              <tr key={partner.id} className="hover:bg-slate-50/50 transition-colors">
+              <tr key={`partner-${partner.id}`} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${

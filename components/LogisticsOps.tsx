@@ -73,15 +73,17 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
         setLocations(locsRes.data);
       }
       if (originsRes.data) {
-        setOrigins(originsRes.data);
-        if (originsRes.data.length > 0) {
-          setOrigin(originsRes.data[0].id);
+        const uniqueOrigins = Array.from(new Map(originsRes.data.map(item => [item.id, item])).values());
+        setOrigins(uniqueOrigins);
+        if (uniqueOrigins.length > 0) {
+          setOrigin(uniqueOrigins[0].id);
         }
       }
       if (destsRes.data) {
-        setDestinations(destsRes.data);
-        if (destsRes.data.length > 0) {
-          setDestination(destsRes.data[0].id);
+        const uniqueDests = Array.from(new Map(destsRes.data.map(item => [item.id, item])).values());
+        setDestinations(uniqueDests);
+        if (uniqueDests.length > 0) {
+          setDestination(uniqueDests[0].id);
         }
       }
       if (batchesRes.data) setBatches(batchesRes.data);
@@ -154,9 +156,10 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
     
     setErrors([]);
     const validationErrors: string[] = [];
-    if (assets.some(a => !a.batchId)) validationErrors.push("Please select a Batch Reference for all items.");
+    if (assets.some(a => !a.batchId || a.batchId.trim() === "")) validationErrors.push("Please select a valid Batch Reference for all items.");
     if (assets.some(a => a.quantity <= 0)) validationErrors.push("All line items must have a quantity > 0.");
     if (origin === destination) validationErrors.push("Origin and Destination cannot be the same.");
+    if (!destination) validationErrors.push("Destination is required.");
     
     if (!isInternal) {
       if (!truckId) validationErrors.push("Please select a truck.");
@@ -208,7 +211,9 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
             if (splitError) throw splitError;
             if (!newBatchId) throw new Error("Failed to generate new batch ID during split");
             
+            console.log("Split RPC Result:", newBatchId);
             targetBatchId = castId(newBatchId);
+            console.log("Target Batch ID after cast:", targetBatchId);
           } else {
             // Full Movement
             const { error: updateError } = await supabase
@@ -223,24 +228,52 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
             if (updateError) throw updateError;
           }
 
+          if (!targetBatchId || typeof targetBatchId !== "string") {
+            throw new Error(`Invalid batch_id for item ${item.batchId}. Movement cannot be recorded.`);
+          }
+
+          // Verify the batch exists before insert
+          const { data: batchExists, error: existError } = await supabase
+            .from("batches")
+            .select("id")
+            .eq("id", targetBatchId)
+            .single();
+
+          if (existError || !batchExists) {
+            throw new Error(`Batch ${targetBatchId} does not exist in the database.`);
+          }
+
           if (!firstTargetBatchId) firstTargetBatchId = targetBatchId;
 
           // Record the movement
+          const movementPayload = {
+            batch_id: targetBatchId,
+            from_location_id: origin,
+            to_location_id: destination,
+            truck_id: isInternal ? null : truckId,
+            driver_id: isInternal ? null : driverId,
+            quantity: item.quantity,
+            timestamp: new Date(movementDate).toISOString(),
+            condition: condition,
+            origin_user_id: currentUser.id
+          };
+
+          // Prevent empty inserts
+          if (!movementPayload.batch_id) {
+            throw new Error("Batch ID is missing. Cannot record movement.");
+          }
+
+          // Log payload before insert for debugging
+          console.log("Movement payload:", movementPayload);
+
           const { error: moveError } = await supabase
             .from('batch_movements')
-            .insert([normalizePayload({
-              batch_id: targetBatchId,
-              from_location_id: origin,
-              to_location_id: destination,
-              truck_id: isInternal ? null : truckId,
-              driver_id: isInternal ? null : driverId,
-              quantity: item.quantity,
-              timestamp: new Date(movementDate).toISOString(),
-              condition: condition,
-              origin_user_id: currentUser.id
-            })]);
+            .insert([normalizePayload(movementPayload)]);
 
-          if (moveError) throw moveError;
+          if (moveError) {
+            console.error("Movement capture error:", moveError);
+            throw moveError;
+          }
         }
 
         if (thaanFile && firstTargetBatchId) {
@@ -360,7 +393,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     value={origin}
                     onChange={e => setOrigin(e.target.value)}
                   >
-                    {origins.map(o => <option key={o.id} value={o.id}>{o.display_name}</option>)}
+                    {origins.map(o => <option key={`origin-${o.id}`} value={o.id}>{o.display_name}</option>)}
                   </select>
                 </label>
                 <label className="block space-y-2">
@@ -374,15 +407,17 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     onChange={e => setDestination(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {locations.filter(l => l.category === 'Home').map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      {locations.filter(l => l.category === 'Home').map(l => <option key={`dest-home-${l.id}`} value={l.id}>{l.name}</option>)}
                     </optgroup>
                     {!isInternal && (
                       <>
                         <optgroup label="Customers & Partners">
-                          {destinations.map(d => <option key={d.id} value={d.id}>{d.display_name}</option>)}
+                          {destinations
+                            .filter(d => !locations.some(l => l.id === d.id && l.category === 'Home'))
+                            .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
                         </optgroup>
                         <optgroup label="Trucks (In-Transit)">
-                          {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                          {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={`dest-transit-${l.id}`} value={l.id}>{l.name}</option>)}
                         </optgroup>
                       </>
                     )}
@@ -551,8 +586,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
 
                   <button 
                     type="submit" 
-                    disabled={isSubmitting}
-                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3"
+                    disabled={isSubmitting || assets.some(a => !a.batchId || a.quantity <= 0) || !origin || !destination}
+                    className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3"
                   >
                     {isSubmitting ? 'Syncing...' : 'RECORD MOVEMENT'}
                   </button>

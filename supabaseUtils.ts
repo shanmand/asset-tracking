@@ -7,11 +7,25 @@ import { PostgrestResponse, PostgrestSingleResponse } from '@supabase/supabase-j
  */
 export const castId = (id: any): string => {
   if (id === null || id === undefined) return '';
+  
+  // Handle arrays (sometimes RPC returns an array of results)
+  if (Array.isArray(id)) {
+    return id.length > 0 ? castId(id[0]) : '';
+  }
+
   if (typeof id === 'object' && id !== null) {
+    // Check common ID keys
     if ('id' in id) return String(id.id);
     if ('batch_id' in id) return String(id.batch_id);
     if ('uuid' in id) return String(id.uuid);
+    
+    // If it's a single-key object (common for RPC results), take the first value
+    const values = Object.values(id);
+    if (values.length === 1) {
+      return castId(values[0]);
+    }
   }
+  
   const str = String(id);
   return str === '[object Object]' ? '' : str;
 };

@@ -470,6 +470,13 @@ BEGIN
     UPDATE public.batches SET quantity = quantity - move_qty WHERE id = original_batch_id;
     INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date)
     VALUES (v_new_batch_id, v_asset_id, move_qty, new_location_id, v_status, move_date);
+
+    -- Inherit Forensic History: Copy movements from parent to child
+    INSERT INTO public.batch_movements (batch_id, from_location_id, to_location_id, truck_id, driver_id, condition, origin_user_id, quantity, transaction_date, timestamp)
+    SELECT v_new_batch_id, from_location_id, to_location_id, truck_id, driver_id, condition, origin_user_id, quantity, transaction_date, timestamp
+    FROM public.batch_movements
+    WHERE batch_id = original_batch_id;
+
     RETURN v_new_batch_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1,12 +1,13 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
-import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon } from 'lucide-react';
+import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
+import ForensicTable from './ForensicTable';
 
-const BatchTracker: React.FC = () => {
+const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchId }) => {
   const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
   const [thaans, setThaans] = useState<ThaanSlip[]>(isSupabaseConfigured ? [] : MOCK_THAANS);
   const [movements, setMovements] = useState<BatchMovement[]>(isSupabaseConfigured ? [] : MOCK_MOVEMENTS);
@@ -17,33 +18,43 @@ const BatchTracker: React.FC = () => {
   const [fees, setFees] = useState<FeeSchedule[]>(isSupabaseConfigured ? [] : MOCK_FEES);
   const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>(isSupabaseConfigured ? [] : MOCK_ASSETS);
   
-  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchData = async () => {
-    if (!isSupabaseConfigured) {
-      setBatches([]);
-      setThaans([]);
-      setMovements([]);
-      setLocations([]);
-      setTrucks([]);
-      setDrivers([]);
-      setFees([]);
-      setAssetsMaster([]);
-      setIsLoading(false);
-      return;
-    }
-
+  const fetchBatchDetail = async (batchId: string) => {
+    if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
-      const [batchesRes, thaansRes, movesRes, tracesRes, locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
-        supabase.from('batches').select('*'),
-        supabase.from('thaan_slips').select('*'),
-        supabase.from('batch_movements').select('*'),
-        supabase.from('vw_master_logistics_trace').select('*'),
+      const [batchRes, thaanRes, movesRes, tracesRes] = await Promise.all([
+        supabase.from('batches').select('*').eq('id', batchId).single(),
+        supabase.from('thaan_slips').select('*').eq('batch_id', batchId),
+        supabase.from('batch_movements').select('*').eq('batch_id', batchId),
+        supabase.from('vw_master_logistics_trace').select('*').eq('batch_id', batchId)
+      ]);
+
+      if (batchRes.data) {
+        setBatches(prev => {
+          const filtered = prev.filter(b => b.id !== batchId);
+          return [...filtered, batchRes.data];
+        });
+      }
+      if (thaanRes.data) setThaans(thaanRes.data);
+      if (movesRes.data) setMovements(movesRes.data);
+      if (tracesRes.data) setTraces(tracesRes.data);
+    } catch (err) {
+      console.error("Error fetching batch detail:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchMasterData = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const [locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
         supabase.from('locations').select('*'),
         supabase.from('trucks').select('*'),
         supabase.from('drivers').select('*'),
@@ -51,30 +62,25 @@ const BatchTracker: React.FC = () => {
         supabase.from('asset_master').select('*')
       ]);
 
-      if (batchesRes.data) {
-        setBatches(batchesRes.data);
-        if (batchesRes.data.length > 0 && !selectedBatchId) {
-          setSelectedBatchId(batchesRes.data[0].id);
-        }
-      }
-      if (thaansRes.data) setThaans(thaansRes.data);
-      if (movesRes.data) setMovements(movesRes.data);
-      if (tracesRes.data) setTraces(tracesRes.data);
       if (locsRes.data) setLocations(locsRes.data);
       if (trucksRes.data) setTrucks(trucksRes.data);
       if (driversRes.data) setDrivers(driversRes.data);
       if (feesRes.data) setFees(feesRes.data);
       if (assetsRes.data) setAssetsMaster(assetsRes.data);
     } catch (err) {
-      console.error("Error fetching batch tracker data:", err);
-    } finally {
-      setIsLoading(false);
+      console.error("Error fetching master data:", err);
     }
   };
 
-  React.useEffect(() => {
-    fetchData();
+  useEffect(() => {
+    fetchMasterData();
   }, []);
+
+  useEffect(() => {
+    if (selectedBatchId) {
+      fetchBatchDetail(selectedBatchId);
+    }
+  }, [selectedBatchId]);
 
   const currentBatch = batches.find(b => String(b.id) === String(selectedBatchId));
   const currentTraces = traces.filter(t => String(t.batch_id) === String(selectedBatchId)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -156,22 +162,22 @@ const BatchTracker: React.FC = () => {
     );
   }
 
+  if (!selectedBatchId) {
+    return <ForensicTable selectedBranchId={selectedBranchId} onSelectBatch={setSelectedBatchId} />;
+  }
+
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap gap-4 items-center">
-        {batches.map(b => (
-          <button 
-            key={b.id}
-            onClick={() => setSelectedBatchId(b.id)}
-            className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
-              selectedBatchId === b.id 
-                ? 'bg-slate-900 text-white ring-4 ring-slate-200' 
-                : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            {b.id} ({b.status})
-          </button>
-        ))}
+      <div className="flex items-center justify-between">
+        <button 
+          onClick={() => setSelectedBatchId(null)}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 uppercase hover:bg-slate-50 transition-all shadow-sm"
+        >
+          <ArrowLeft size={14} /> Back to Forensic List
+        </button>
+        <div className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">
+          Batch Detail: #{selectedBatchId}
+        </div>
       </div>
 
       {currentBatch && (
@@ -221,7 +227,7 @@ const BatchTracker: React.FC = () => {
           <div className="space-y-6">
             <BatchFinancialDetailCard 
               batchId={selectedBatchId} 
-              onUpdate={fetchData} 
+              onUpdate={() => selectedBatchId && fetchBatchDetail(selectedBatchId)} 
             />
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
