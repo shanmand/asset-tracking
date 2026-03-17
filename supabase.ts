@@ -10,11 +10,20 @@ import { User, UserRole } from './types';
 const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || (process.env as any).SUPABASE_URL || 'https://your-project-id.supabase.co';
 const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || (process.env as any).SUPABASE_ANON_KEY || 'your-live-anon-key';
 
+console.log('Supabase Config:', { 
+  url: SUPABASE_URL, 
+  hasKey: !!SUPABASE_ANON_KEY,
+  isPlaceholderUrl: SUPABASE_URL === 'https://your-project-id.supabase.co',
+  isPlaceholderKey: SUPABASE_ANON_KEY === 'your-live-anon-key'
+});
+
 export const isSupabaseConfigured = 
   SUPABASE_URL && 
   SUPABASE_URL !== 'https://your-project-id.supabase.co' && 
   SUPABASE_ANON_KEY &&
   SUPABASE_ANON_KEY !== 'your-live-anon-key';
+
+console.log('isSupabaseConfigured:', isSupabaseConfigured);
 
 /**
  * Single Supabase Instance

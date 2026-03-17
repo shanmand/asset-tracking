@@ -2,12 +2,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
 import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
-import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace } from '../types';
+import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace, MovementCondition } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
 import ForensicTable from './ForensicTable';
 
-const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchId }) => {
+const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchId: branchFilterId }) => {
   const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
   const [thaans, setThaans] = useState<ThaanSlip[]>(isSupabaseConfigured ? [] : MOCK_THAANS);
   const [movements, setMovements] = useState<BatchMovement[]>(isSupabaseConfigured ? [] : MOCK_MOVEMENTS);
@@ -18,7 +18,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
   const [fees, setFees] = useState<FeeSchedule[]>(isSupabaseConfigured ? [] : MOCK_FEES);
   const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>(isSupabaseConfigured ? [] : MOCK_ASSETS);
   
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -28,6 +28,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
+      console.log('BatchTracker: Fetching detail for batch:', batchId);
       const [batchRes, thaanRes, movesRes, tracesRes] = await Promise.all([
         supabase.from('batches').select('*').eq('id', batchId).single(),
         supabase.from('thaan_slips').select('*').eq('batch_id', batchId),
@@ -52,6 +53,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
   };
 
   const fetchMasterData = async () => {
+    console.log('BatchTracker: Fetching master data...');
     if (!isSupabaseConfigured) return;
     try {
       const [locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
@@ -61,6 +63,12 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
         supabase.from('fee_schedule').select('*'),
         supabase.from('asset_master').select('*')
       ]);
+
+      console.log('BatchTracker Master Data Received:', {
+        locations: locsRes.data?.length,
+        trucks: trucksRes.data?.length,
+        drivers: driversRes.data?.length
+      });
 
       if (locsRes.data) setLocations(locsRes.data);
       if (trucksRes.data) setTrucks(trucksRes.data);
@@ -77,26 +85,26 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
   }, []);
 
   useEffect(() => {
-    if (selectedBatchId) {
-      fetchBatchDetail(selectedBatchId);
+    if (activeBatchId) {
+      fetchBatchDetail(activeBatchId);
     }
-  }, [selectedBatchId]);
+  }, [activeBatchId]);
 
-  const currentBatch = batches.find(b => String(b.id) === String(selectedBatchId));
-  const currentTraces = traces.filter(t => String(t.batch_id) === String(selectedBatchId)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const currentBatch = batches.find(b => String(b.id) === String(activeBatchId));
+  const currentTraces = traces.filter(t => String(t.batch_id) === String(activeBatchId)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const asset = assetsMaster.find(a => a.id === currentBatch?.asset_id);
-  const thaan = thaans.find(t => String(t.batch_id) === String(selectedBatchId));
+  const thaan = thaans.find(t => String(t.batch_id) === String(activeBatchId));
 
   const handleUploadThaan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedBatchId) return;
+    if (!file || !activeBatchId) return;
 
     setIsUploading(true);
     setUploadError(null);
 
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${selectedBatchId}-${Math.random()}.${fileExt}`;
+      const fileName = `${activeBatchId}-${Math.random()}.${fileExt}`;
       const filePath = `thaan-slips/${fileName}`;
 
       const { error: storageError } = await supabase.storage
@@ -112,7 +120,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
       const { data: newThaanRecord, error: dbError } = await supabase
         .from('thaan_slips')
         .insert([{
-          batch_id: selectedBatchId,
+          batch_id: activeBatchId,
           doc_url: publicUrl,
           is_signed: true,
           signed_at: new Date().toISOString()
@@ -123,11 +131,11 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
       if (dbError) throw dbError;
 
       setThaans(prev => {
-        const filtered = prev.filter(t => t.batch_id !== selectedBatchId);
+        const filtered = prev.filter(t => t.batch_id !== activeBatchId);
         return [...filtered, newThaanRecord as ThaanSlip];
       });
 
-      setBatches(prev => prev.map(b => b.id === selectedBatchId ? { ...b, status: 'Success' } : b));
+      setBatches(prev => prev.map(b => b.id === activeBatchId ? { ...b, status: 'Success' } : b));
 
     } catch (err: any) {
       setUploadError(err.message || "Failed to upload THAAN slip.");
@@ -152,31 +160,32 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
     return <div className="p-20 text-center font-bold text-slate-400 animate-pulse uppercase tracking-widest">Loading Batch Intelligence...</div>;
   }
 
-  if (batches.length === 0) {
+  if (!activeBatchId) {
+    return <ForensicTable selectedBranchId={branchFilterId} onSelectBatch={setActiveBatchId} />;
+  }
+
+  if (!currentBatch && batches.length > 0) {
     return (
       <div className="p-20 text-center bg-white rounded-2xl border border-slate-200 border-dashed">
         <Package className="mx-auto text-slate-200 mb-4" size={48} />
-        <h3 className="font-bold text-slate-800 uppercase tracking-widest">No Batches Found</h3>
-        <p className="text-sm text-slate-500 mt-2">Create a movement manifest to start tracking batches.</p>
+        <h3 className="font-bold text-slate-800 uppercase tracking-widest">Batch Not Found</h3>
+        <p className="text-sm text-slate-500 mt-2">The requested batch could not be located in the system.</p>
+        <button onClick={() => setActiveBatchId(null)} className="mt-4 text-emerald-600 font-bold text-sm">Back to List</button>
       </div>
     );
-  }
-
-  if (!selectedBatchId) {
-    return <ForensicTable selectedBranchId={selectedBranchId} onSelectBatch={setSelectedBatchId} />;
   }
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <button 
-          onClick={() => setSelectedBatchId(null)}
+          onClick={() => setActiveBatchId(null)}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 uppercase hover:bg-slate-50 transition-all shadow-sm"
         >
           <ArrowLeft size={14} /> Back to Forensic List
         </button>
         <div className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">
-          Batch Detail: #{selectedBatchId}
+          Batch Detail: #{activeBatchId}
         </div>
       </div>
 
@@ -201,7 +210,11 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
                           </p>
                           <h4 className="font-bold text-slate-800 text-lg mt-1">{trace.from_location_name} &rarr; {trace.to_location_name}</h4>
                           <div className="flex gap-2 mt-2">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${trace.condition === 'Clean' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{trace.condition}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                              trace.condition === MovementCondition.CLEAN ? 'bg-emerald-100 text-emerald-700' : 
+                              trace.condition === MovementCondition.DIRTY ? 'bg-amber-100 text-amber-700' : 
+                              'bg-rose-100 text-rose-700'
+                            }`}>{trace.condition}</span>
                             {trace.truck_plate && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><TruckIcon size={10} /> {trace.truck_plate}</span>}
                             {trace.driver_name && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><UserIcon size={10} /> {trace.driver_name}</span>}
                           </div>
@@ -226,8 +239,8 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
 
           <div className="space-y-6">
             <BatchFinancialDetailCard 
-              batchId={selectedBatchId} 
-              onUpdate={() => selectedBatchId && fetchBatchDetail(selectedBatchId)} 
+              batchId={activeBatchId} 
+              onUpdate={() => activeBatchId && fetchBatchDetail(activeBatchId)} 
             />
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">

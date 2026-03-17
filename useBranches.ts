@@ -10,6 +10,7 @@ export const useBranches = () => {
 
   useEffect(() => {
     const fetchBranches = async () => {
+      console.log('useBranches: Fetching branches... Configured:', isSupabaseConfigured);
       if (!isSupabaseConfigured) {
         setIsLoading(false);
         return;
@@ -21,10 +22,14 @@ export const useBranches = () => {
           .select('*')
           .order('name', { ascending: true });
           
-        if (error) throw error;
+        if (error) {
+          console.error('useBranches: Error fetching branches:', error);
+          throw error;
+        }
+        console.log('useBranches: Branches received:', data?.length);
         if (data) setBranches(data);
       } catch (err: any) {
-        console.error('Error fetching branches:', err);
+        console.error('useBranches: Error fetching branches:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);

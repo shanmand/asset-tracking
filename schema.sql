@@ -902,7 +902,8 @@ SELECT
     s.branch_id,
     b.status AS batch_status,
     b.transaction_date,
-    public.calculate_batch_accrual(b.id) AS daily_accrued_liability
+    public.calculate_batch_accrual(b.id) AS daily_accrued_liability,
+    (CURRENT_DATE - b.transaction_date) AS days_in_circulation
 FROM public.batches b
 JOIN public.asset_master a ON b.asset_id = a.id
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;

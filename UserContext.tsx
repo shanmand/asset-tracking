@@ -34,6 +34,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const fetchProfile = async (userId: string) => {
+    console.log('UserContext: Fetching profile for:', userId);
     try {
       let data: any;
       let error: any;
@@ -47,18 +48,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       data = firstTry.data;
       error = firstTry.error;
 
-      if (error && error.message.includes('column "email" does not exist')) {
-        // Fallback for legacy schema
-        const retry = await supabase
-          .from('users')
-          .select(`id, full_name, home_branch_name, role_name`)
-          .eq('id', userId)
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
-
       if (error) {
+        console.warn("UserContext: Profile Fetch Error (User likely not in DB yet):", error);
         setProfile({
           id: userId,
           full_name: "Guest User",
@@ -69,6 +60,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
       }
 
+      console.log('UserContext: Profile received:', data);
       const profileData: UserProfile = {
         id: data.id,
         full_name: data.full_name || 'Unnamed User',
@@ -104,7 +96,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     // Fix: Using type casting to bypass property missing errors on SupabaseAuthClient in specific environments
-    const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
+    const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((event: any, session: any) => {
+      console.log('UserContext: Auth State Change Event:', event, session?.user?.id);
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);

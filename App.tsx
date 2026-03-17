@@ -105,6 +105,7 @@ enum NavItem {
 }
 
 const AppContent: React.FC = () => {
+  console.log('AppContent Rendering...');
   const { user, profile, isLoading: isUserLoading, logout, hasPermission } = useUser();
   const { branches: dbBranches, isLoading: isBranchesLoading } = useBranches();
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);

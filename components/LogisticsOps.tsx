@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock } from 'lucide-react';
+import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock, Info } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
 import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -57,6 +57,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
 
     setIsLoading(true);
     try {
+      console.log('LogisticsOps: Fetching data...');
       const [locsRes, originsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
         supabase.from('locations').select('*'),
         supabase.from('vw_all_origins').select('*'),
@@ -67,6 +68,13 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
         supabase.from('asset_master').select('*'),
         supabase.from('driver_shifts').select('driver_id, truck_id').is('end_time', null)
       ]);
+
+      console.log('LogisticsOps Data Received:', {
+        locations: locsRes.data?.length,
+        origins: originsRes.data?.length,
+        destinations: destsRes.data?.length,
+        batches: batchesRes.data?.length
+      });
 
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
       if (locsRes.data) {
@@ -277,6 +285,23 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
           if (moveError) {
             console.error("Movement capture error:", moveError);
             throw moveError;
+          }
+
+          // Automated Claim Trigger for Dirty/Damaged assets
+          if (condition !== MovementCondition.CLEAN && !isInternal) {
+            const { error: claimError } = await supabase
+              .from('claims')
+              .insert([{
+                id: `CLM-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+                batch_id: targetBatchId,
+                truck_id: truckId,
+                driver_id: driverId,
+                type: condition === MovementCondition.DAMAGED ? 'Damaged' : 'Dirty',
+                amount_claimed_zar: condition === MovementCondition.DAMAGED ? 150 : 25, // Mock amounts
+                status: 'Lodged'
+              }]);
+            
+            if (claimError) console.error("Claim auto-trigger error:", claimError);
           }
         }
 
@@ -525,6 +550,51 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                         onChange={e => setMovementDate(e.target.value)}
                       />
                     </div>
+                  </div>
+
+                  {/* Condition Selection */}
+                  <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert size={16} className="text-slate-400" />
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">Asset Condition on Receipt/Dispatch</h4>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      {[MovementCondition.CLEAN, MovementCondition.DIRTY, MovementCondition.DAMAGED].map((cond) => (
+                        <button
+                          key={cond}
+                          type="button"
+                          onClick={() => setCondition(cond)}
+                          className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                            condition === cond 
+                              ? cond === MovementCondition.CLEAN ? 'border-emerald-500 bg-emerald-50 text-emerald-700' :
+                                cond === MovementCondition.DIRTY ? 'border-amber-500 bg-amber-50 text-amber-700' :
+                                'border-rose-500 bg-rose-50 text-rose-700'
+                              : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            condition === cond
+                              ? cond === MovementCondition.CLEAN ? 'bg-emerald-500 text-white' :
+                                cond === MovementCondition.DIRTY ? 'bg-amber-500 text-white' :
+                                'bg-rose-500 text-white'
+                              : 'bg-slate-100 text-slate-400'
+                          }`}>
+                            {cond === MovementCondition.CLEAN ? <CheckCircle2 size={16} /> : 
+                             cond === MovementCondition.DIRTY ? <Zap size={16} /> : 
+                             <AlertTriangle size={16} />}
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-widest">{cond}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {condition !== MovementCondition.CLEAN && (
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 flex items-center gap-3">
+                        <Info size={14} className="text-amber-600" />
+                        <p className="text-[10px] font-bold text-amber-800 uppercase tracking-tight">
+                          Flagging as {condition} will automatically trigger a supplier claim for reconciliation.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* THAAN Slip Upload Section - Always visible for better UX */}

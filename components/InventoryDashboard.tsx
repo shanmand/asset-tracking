@@ -5,7 +5,12 @@ import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, Tre
 import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule, Branch, ThaanSlip } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
-const InventoryDashboard: React.FC = () => {
+interface InventoryDashboardProps {
+  branchContext?: string;
+}
+
+const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext = 'Consolidated' }) => {
+  console.log('InventoryDashboard Rendering...', { branchContext });
   const [locations, setLocations] = useState<Location[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
@@ -16,6 +21,16 @@ const InventoryDashboard: React.FC = () => {
 
   // Filters
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
+
+  useEffect(() => {
+    if (branches.length > 0 && branchContext !== 'Consolidated') {
+      const branch = branches.find(b => b.name === branchContext);
+      if (branch) setSelectedBranch(branch.id);
+    } else if (branchContext === 'Consolidated') {
+      setSelectedBranch('all');
+    }
+  }, [branchContext, branches]);
+
   const [selectedAsset, setSelectedAsset] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -23,6 +38,7 @@ const InventoryDashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log('InventoryDashboard: Fetching data... Configured:', isSupabaseConfigured);
       if (!isSupabaseConfigured) {
         setLocations([]);
         setBatches([]);
@@ -45,6 +61,13 @@ const InventoryDashboard: React.FC = () => {
           supabase.from('thaan_slips').select('*')
         ]);
 
+        console.log('InventoryDashboard Data Received:', {
+          locations: locsRes.data?.length,
+          batches: batchesRes.data?.length,
+          assets: assetsRes.data?.length,
+          branches: branchesRes.data?.length
+        });
+
         if (locsRes.data) {
           // De-duplicate locations by ID to prevent React key errors
           const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
@@ -52,12 +75,15 @@ const InventoryDashboard: React.FC = () => {
         }
         if (batchesRes.data) {
           // Map view data back to Batch type or handle it specifically
-          setBatches(batchesRes.data.map((b: any) => ({
+          const mapped = batchesRes.data.map((b: any) => ({
             ...b,
             id: b.batch_id,
             // Ensure we have the accrued_amount available
             accrued_amount: b.accrued_amount
-          })));
+          }));
+          // De-duplicate batches
+          const uniqueBatches = Array.from(new Map(mapped.map((b: any) => [b.id, b])).values());
+          setBatches(uniqueBatches);
         }
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);

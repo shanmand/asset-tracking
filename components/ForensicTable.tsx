@@ -14,7 +14,11 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
   const PAGE_SIZE = 25;
 
   const fetchData = async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      console.log('Supabase not configured, skipping fetch.');
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       console.log('Fetching Forensic Data with filters:', { selectedBranchId, startDate, endDate, page, searchQuery });
@@ -48,8 +52,9 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
         throw error;
       }
       
-      console.log('Forensic Data Received:', { count, dataLength: results?.length });
-      setData(results || []);
+      console.log('Forensic Data Received:', { count, dataLength: results?.length, firstTwo: results?.slice(0, 2) });
+      const uniqueData = Array.from(new Map((results || []).map(item => [item.movement_id, item])).values());
+      setData(uniqueData);
       setTotalCount(count || 0);
     } catch (err) {
       console.error("Forensic Fetch Error:", err);

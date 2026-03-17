@@ -13,6 +13,7 @@ interface DashboardViewProps {
 }
 
 const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated', onDrillDown, onSchemaFix }) => {
+  console.log('DashboardView Rendering...', { branchContext, currentUser: currentUser?.id });
   const [dbBatches, setDbBatches] = useState<Batch[]>([]);
   const [dbLosses, setDbLosses] = useState<AssetLoss[]>([]);
   const [dbLocations, setDbLocations] = useState<Location[]>([]);
@@ -55,24 +56,37 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           inventory: inventoryRes.data?.length,
           losses: lossesRes.data?.length,
           locations: locsRes.data?.length,
-          branches: branchesRes.data?.length
+          branches: branchesRes.data?.length,
+          rawInventory: inventoryRes.data?.slice(0, 2)
         });
 
         if (inventoryRes.data) {
           // Map view columns back to Batch type for compatibility or use directly
-          const mappedBatches = inventoryRes.data.map((item: any) => ({
-            id: item.batch_id,
-            asset_id: item.asset_id,
-            quantity: item.quantity,
-            current_location_id: item.current_location_id || item.current_location, // Fallback if ID not in view
-            status: item.batch_status,
-            branch_id: item.branch_id,
-            daily_accrued_liability: item.daily_accrued_liability,
-            daily_rental_fee: item.daily_rental_fee,
-            days_in_circulation: item.days_in_circulation,
-            created_at: item.transaction_date,
-            transaction_date: item.transaction_date
-          }));
+          const mappedBatches = inventoryRes.data.map((item: any) => {
+            const txDate = new Date(item.transaction_date);
+            const now = new Date();
+            const diffTime = Math.abs(now.getTime() - txDate.getTime());
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            const daysInCirculation = item.days_in_circulation !== undefined && item.days_in_circulation !== null
+              ? item.days_in_circulation
+              : diffDays;
+
+            return {
+              id: item.batch_id,
+              asset_id: item.asset_id,
+              asset_name: item.asset_name,
+              quantity: item.quantity,
+              current_location_id: item.current_location_id || item.current_location,
+              status: item.batch_status,
+              branch_id: item.branch_id,
+              daily_accrued_liability: item.daily_accrued_liability,
+              daily_rental_fee: item.daily_rental_fee,
+              days_in_circulation: daysInCirculation,
+              created_at: item.transaction_date,
+              transaction_date: item.transaction_date
+            };
+          });
           // De-duplicate batches
           const uniqueBatches = Array.from(new Map(mappedBatches.map((item: any) => [item.id, item])).values());
           setDbBatches(uniqueBatches as any);

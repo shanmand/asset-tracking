@@ -62,6 +62,7 @@ const SupabaseConnection: React.FC = () => {
   };
 
   const checkConnection = async () => {
+    console.log('SupabaseConnection: Checking connection... Configured:', isSupabaseConfigured);
     if (!isSupabaseConfigured) {
       setStatus('unconfigured');
       setLatency(null);
@@ -71,15 +72,39 @@ const SupabaseConnection: React.FC = () => {
     setStatus('checking');
     const start = performance.now();
     try {
-      // Simple query to check connectivity
-      const { data, error } = await supabase.from('users').select('count', { count: 'exact', head: true });
-      
-      if (error) throw error;
-      
-      const end = performance.now();
-      setLatency(Math.round(end - start));
-      setStatus('connected');
-      setErrorMsg(null);
+      // Check core tables and views
+      const requiredObjects = [
+        { name: 'users', type: 'table' },
+        { name: 'branches', type: 'table' },
+        { name: 'asset_master', type: 'table' },
+        { name: 'locations', type: 'table' },
+        { name: 'batches', type: 'table' },
+        { name: 'vw_global_inventory_tracker', type: 'view' },
+        { name: 'vw_batch_forensics', type: 'view' },
+        { name: 'vw_all_sources', type: 'view' },
+        { name: 'vw_all_origins', type: 'view' },
+        { name: 'vw_movement_destinations', type: 'view' },
+        { name: 'vw_batch_accruals', type: 'view' }
+      ];
+
+      const results = await Promise.all(
+        requiredObjects.map(obj => 
+          supabase.from(obj.name).select('count', { count: 'exact', head: true })
+            .then(res => ({ name: obj.name, exists: !res.error, error: res.error }))
+        )
+      );
+
+      const missing = results.filter(r => !r.exists);
+      if (missing.length > 0) {
+        console.warn("Missing database objects:", missing);
+        setErrorMsg(`Missing ${missing.length} objects: ${missing.map(m => m.name).join(', ')}`);
+        setStatus('error');
+      } else {
+        const end = performance.now();
+        setLatency(Math.round(end - start));
+        setStatus('connected');
+        setErrorMsg(null);
+      }
     } catch (err: any) {
       console.error("Supabase connection test failed:", err);
       setStatus('error');
