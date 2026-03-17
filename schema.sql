@@ -984,6 +984,7 @@ CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
 SELECT 
     bm.id as movement_id,
     bm.timestamp as movement_time,
+    bm.transaction_date,
     bm.batch_id,
     bm.quantity,
     bm.condition,
@@ -994,6 +995,7 @@ SELECT
     d.id as driver_id,
     t.plate_number as truck_plate,
     t.id as truck_id,
+    t.branch_id,
     ds.start_time as shift_start,
     ds.end_time as shift_end,
     ds.manual_end_time as shift_manual_end,

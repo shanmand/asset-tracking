@@ -1,18 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Calendar, User, Truck, FileText, Printer, Loader2, Filter, ArrowRight, MapPin, Clock } from 'lucide-react';
+import { Search, Calendar, User, Truck, FileText, Printer, Loader2, Filter, ArrowRight, MapPin, Clock, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { Branch } from '../types';
 
 interface TripAuditRecord {
   movement_id: string;
   batch_id: string;
-  movement_timestamp: string;
+  movement_time: string;
+  transaction_date: string;
   quantity: number;
+  condition: string;
   route_instructions: string | null;
   from_location: string;
   to_location: string;
   driver_name: string;
   truck_plate: string;
+  branch_id: string;
   shift_start: string | null;
   shift_end: string | null;
   manual_end_time: string | null;
@@ -21,12 +25,14 @@ interface TripAuditRecord {
 
 const TripAuditTrail: React.FC = () => {
   const [records, setRecords] = useState<TripAuditRecord[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState({
-    startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0],
+    startDate: '2025-07-01',
     endDate: new Date().toISOString().split('T')[0],
     driverName: '',
-    truckPlate: ''
+    truckPlate: '',
+    branchId: ''
   });
 
   const fetchData = async () => {
@@ -38,11 +44,15 @@ const TripAuditTrail: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Fetch branches for dropdown
+      const { data: branchData } = await supabase.from('branches').select('*').order('name');
+      if (branchData) setBranches(branchData);
+
       let query = supabase
         .from('vw_trip_audit_trail')
         .select('*')
-        .gte('movement_timestamp', `${filters.startDate}T00:00:00`)
-        .lte('movement_timestamp', `${filters.endDate}T23:59:59`);
+        .gte('transaction_date', filters.startDate)
+        .lte('transaction_date', filters.endDate);
 
       if (filters.driverName) {
         query = query.ilike('driver_name', `%${filters.driverName}%`);
@@ -50,8 +60,11 @@ const TripAuditTrail: React.FC = () => {
       if (filters.truckPlate) {
         query = query.ilike('truck_plate', `%${filters.truckPlate}%`);
       }
+      if (filters.branchId) {
+        query = query.eq('branch_id', filters.branchId);
+      }
 
-      const { data, error } = await query.order('movement_timestamp', { ascending: false });
+      const { data, error } = await query.order('transaction_date', { ascending: false });
 
       if (error) throw error;
       setRecords(data || []);
@@ -81,7 +94,7 @@ const TripAuditTrail: React.FC = () => {
             </div>
             <div>
               <h3 className="font-black text-xl text-slate-900 uppercase tracking-tight">Audit Filters</h3>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Refine Trip History</p>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">High-Volume Trip Auditing</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -100,10 +113,10 @@ const TripAuditTrail: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <Calendar size={12} /> Start Date
+              <Calendar size={12} /> From Date
             </label>
             <input 
               type="date"
@@ -114,7 +127,7 @@ const TripAuditTrail: React.FC = () => {
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <Calendar size={12} /> End Date
+              <Calendar size={12} /> To Date
             </label>
             <input 
               type="date"
@@ -125,7 +138,22 @@ const TripAuditTrail: React.FC = () => {
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <User size={12} /> Driver Name
+              <Building2 size={12} /> Branch
+            </label>
+            <select 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={filters.branchId}
+              onChange={e => setFilters({...filters, branchId: e.target.value})}
+            >
+              <option value="">All Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <User size={12} /> Driver
             </label>
             <input 
               type="text"
@@ -137,7 +165,7 @@ const TripAuditTrail: React.FC = () => {
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <Truck size={12} /> Truck Plate
+              <Truck size={12} /> Truck
             </label>
             <input 
               type="text"
@@ -154,22 +182,22 @@ const TripAuditTrail: React.FC = () => {
       <div className="hidden print:block mb-8 border-b-4 border-slate-900 pb-6">
         <div className="flex justify-between items-end">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">TRIP AUDIT REPORT</h1>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">CrateTrack SA — Logistics Intelligence</p>
+            <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">THE SHUKU FAMILY: TRIP AUDIT LOG</h1>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Logistics Intelligence & Forensic Audit</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Report Generated</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Printed On</p>
             <p className="text-sm font-bold text-slate-900">{new Date().toLocaleString()}</p>
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-8">
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Period Coverage</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selected Date Range</p>
             <p className="text-sm font-bold text-slate-900">{filters.startDate} to {filters.endDate}</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Trips Logged</p>
-            <p className="text-sm font-bold text-slate-900">{records.length} Movements</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Records</p>
+            <p className="text-sm font-bold text-slate-900">{records.length} Trips</p>
           </div>
         </div>
       </div>
@@ -187,97 +215,49 @@ const TripAuditTrail: React.FC = () => {
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No trips found for selected criteria</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
-            {records.map((record) => (
-              <div key={record.movement_id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all print:shadow-none print:border-slate-300 break-inside-avoid">
-                <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/50">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg print:shadow-none">
-                      <Truck size={24} />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-lg text-slate-900 uppercase tracking-tight">{record.truck_plate}</h4>
-                      <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest flex items-center gap-1">
-                        <User size={10} /> {record.driver_name}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-8">
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Movement Time</p>
-                      <p className="text-sm font-bold text-slate-900">{new Date(record.movement_timestamp).toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantity</p>
-                      <p className="text-lg font-black text-emerald-600">{record.quantity} Units</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-12">
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-6">
-                      <div className="flex-1">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                          <MapPin size={10} /> Origin
-                        </p>
-                        <p className="text-sm font-bold text-slate-900">{record.from_location}</p>
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-900 text-white print:bg-slate-100 print:text-slate-900">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Date</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Driver</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Truck</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Origin</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Destination</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Qty</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Route/Instructions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {records.map((record) => (
+                  <tr key={record.movement_id} className="hover:bg-slate-50 transition-colors break-inside-avoid">
+                    <td className="px-6 py-4 text-xs font-bold text-slate-900 whitespace-nowrap">
+                      {new Date(record.transaction_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-900">
+                      {record.driver_name}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-900">
+                      {record.truck_plate}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                      {record.from_location}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                      {record.to_location}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-black text-emerald-600">
+                      {record.quantity}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-500 italic leading-relaxed min-w-[200px]">
+                      <div className="whitespace-normal break-words">
+                        {record.route_instructions || '-'}
                       </div>
-                      <ArrowRight className="text-slate-300" size={20} />
-                      <div className="flex-1">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                          <MapPin size={10} /> Destination
-                        </p>
-                        <p className="text-sm font-bold text-slate-900">{record.to_location}</p>
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
-                        <FileText size={10} /> Route & Instructions
-                      </p>
-                      <p className="text-xs font-medium text-slate-700 italic leading-relaxed">
-                        {record.route_instructions || 'No specific instructions logged for this trip.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                          <Clock size={10} /> Shift Start
-                        </p>
-                        <p className="text-xs font-bold text-blue-900">
-                          {record.shift_start ? new Date(record.shift_start).toLocaleTimeString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-rose-50/50 rounded-2xl border border-rose-100">
-                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                          <Clock size={10} /> Shift End
-                        </p>
-                        <p className="text-xs font-bold text-rose-900">
-                          {record.manual_end_time 
-                            ? new Date(record.manual_end_time).toLocaleTimeString() 
-                            : record.shift_end 
-                              ? new Date(record.shift_end).toLocaleTimeString() 
-                              : 'Active'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
-                        <FileText size={10} /> Shift Notes
-                      </p>
-                      <p className="text-xs font-medium text-slate-700 italic leading-relaxed">
-                        {record.shift_notes || 'No shift notes recorded.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
