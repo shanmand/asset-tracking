@@ -505,44 +505,13 @@ SELECT
     b.asset_id,
     b.quantity,
     b.current_location_id,
-    b.transaction_date,
-    b.transfer_confirmed_by_customer,
     s.name as current_location,
     s.branch_id,
+    b.transaction_date,
+    b.transfer_confirmed_by_customer,
     public.calculate_batch_accrual(b.id) as accrued_amount
 FROM public.batches b
-LEFT JOIN public.locations s ON b.current_location_id = s.id;
-
--- Add vw_batch_forensics view for ForensicTable component
--- 1. Drop the view to start fresh
-DROP VIEW IF EXISTS public.vw_batch_forensics;
-
--- 2. Create the robust view that handles missing branch/driver data
-CREATE OR REPLACE VIEW public.vw_batch_forensics AS
-SELECT 
-    bm.id AS movement_id,
-    bm.batch_id,
-    bm.transaction_date,
-    bm.quantity,
-    -- ORIGIN & DESTINATION
-    COALESCE(l_from.name, bp_from.name, 'Unknown Origin') AS from_location_name,
-    COALESCE(l_to.name, bp_to.name, 'Unknown Destination') AS to_location_name,
-    -- DRIVER & TRUCK
-    COALESCE(d.full_name, bm.driver_id, 'Internal Staff') AS driver_name,
-    COALESCE(t.plate_number, bm.truck_id, 'N/A') AS truck_plate,
-    -- BRANCH CONTEXT (This is where the blank screen likely happened)
-    -- We use COALESCE to ensure we get a Branch ID from ANY linked location
-    COALESCE(l_from.branch_id, l_to.branch_id, 'GLOBAL') AS branch_id
-FROM public.batch_movements bm
-LEFT JOIN public.locations l_from ON bm.from_location_id = l_from.id
-LEFT JOIN public.locations l_to ON bm.to_location_id = l_to.id
-LEFT JOIN public.business_parties bp_from ON bm.from_location_id = bp_from.id
-LEFT JOIN public.business_parties bp_to ON bm.to_location_id = bp_to.id
-LEFT JOIN public.drivers d ON bm.driver_id = d.id
-LEFT JOIN public.trucks t ON bm.truck_id = t.id;
-
-GRANT SELECT ON public.vw_batch_forensics TO authenticated;
-NOTIFY pgrst, 'reload schema';
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- ==========================================
 -- 15. Relax Foreign Key Constraints

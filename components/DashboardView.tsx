@@ -40,6 +40,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
       setIsLoading(true);
       try {
+        console.log('Fetching Dashboard Data...');
         const [inventoryRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes, branchesRes] = await Promise.all([
           supabase.from('vw_global_inventory_tracker').select('*'),
           supabase.from('asset_losses').select('*'),
@@ -49,6 +50,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           supabase.from('claims').select('*'),
           supabase.from('branches').select('*')
         ]);
+
+        console.log('Dashboard Data Received:', {
+          inventory: inventoryRes.data?.length,
+          losses: lossesRes.data?.length,
+          locations: locsRes.data?.length,
+          branches: branchesRes.data?.length
+        });
 
         if (inventoryRes.data) {
           // Map view columns back to Batch type for compatibility or use directly
@@ -65,10 +73,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             created_at: item.transaction_date,
             transaction_date: item.transaction_date
           }));
-          setDbBatches(mappedBatches as any);
+          // De-duplicate batches
+          const uniqueBatches = Array.from(new Map(mappedBatches.map((item: any) => [item.id, item])).values());
+          setDbBatches(uniqueBatches as any);
         }
         if (lossesRes.data) setDbLosses(lossesRes.data);
-        if (locsRes.data) setDbLocations(locsRes.data);
+        if (locsRes.data) {
+          // De-duplicate locations
+          const uniqueLocs = Array.from(new Map(locsRes.data.map((item: any) => [item.id, item])).values());
+          setDbLocations(uniqueLocs);
+        }
         if (usersRes.data) setDbUsers(usersRes.data);
         if (assetsRes.data) setDbAssets(assetsRes.data);
         if (claimsRes.data) setDbClaims(claimsRes.data);

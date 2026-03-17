@@ -70,7 +70,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
 
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
       if (locsRes.data) {
-        setLocations(locsRes.data);
+        const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
+        setLocations(uniqueLocs);
       }
       if (originsRes.data) {
         const uniqueOrigins = Array.from(new Map(originsRes.data.map(item => [item.id, item])).values());
@@ -86,7 +87,10 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
           setDestination(uniqueDests[0].id);
         }
       }
-      if (batchesRes.data) setBatches(batchesRes.data);
+      if (batchesRes.data) {
+        const uniqueBatches = Array.from(new Map(batchesRes.data.map(item => [item.id, item])).values());
+        setBatches(uniqueBatches);
+      }
       if (trucksRes.data) {
         setTrucks(trucksRes.data);
         if (trucksRes.data.length > 0) setTruckId(trucksRes.data[0].id);

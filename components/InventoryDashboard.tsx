@@ -35,9 +35,9 @@ const InventoryDashboard: React.FC = () => {
 
       setIsLoading(true);
       try {
-        // Use the view for accurate liability calculation
+        // Use the view for accurate liability calculation and to include all sources (locations + business parties)
         const [locsRes, batchesRes, assetsRes, feesRes, branchesRes, thaansRes] = await Promise.all([
-          supabase.from('locations').select('*'),
+          supabase.from('vw_all_sources').select('*'),
           supabase.from('vw_batch_accruals').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('fee_schedule').select('*'),
@@ -45,7 +45,11 @@ const InventoryDashboard: React.FC = () => {
           supabase.from('thaan_slips').select('*')
         ]);
 
-        if (locsRes.data) setLocations(locsRes.data);
+        if (locsRes.data) {
+          // De-duplicate locations by ID to prevent React key errors
+          const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
+          setLocations(uniqueLocs);
+        }
         if (batchesRes.data) {
           // Map view data back to Batch type or handle it specifically
           setBatches(batchesRes.data.map((b: any) => ({
