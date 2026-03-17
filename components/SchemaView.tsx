@@ -395,7 +395,113 @@ ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DE
 ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS contact_number TEXT;
 ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS license_number TEXT;
 ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS branch_id TEXT REFERENCES public.branches(id);
-ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`}
+ALTER TABLE IF EXISTS public.drivers ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
+-- 18. Trip Audit Trail View & Sample Data
+-- Run this to fix empty Audit Trail
+-- First, ensure all tables have the required columns
+ALTER TABLE public.batch_movements ADD COLUMN IF NOT EXISTS route_instructions TEXT;
+ALTER TABLE public.batch_movements ADD COLUMN IF NOT EXISTS transaction_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.batch_movements ADD COLUMN IF NOT EXISTS quantity INTEGER;
+
+ALTER TABLE public.driver_shifts ADD COLUMN IF NOT EXISTS manual_end_time TIMESTAMPTZ;
+ALTER TABLE public.driver_shifts ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Relax foreign key constraints to allow both locations and business parties
+DO $$ 
+DECLARE 
+    r RECORD;
+BEGIN
+    -- Drop all foreign key constraints on batches(current_location_id)
+    FOR r IN (
+        SELECT constraint_name 
+        FROM information_schema.key_column_usage 
+        WHERE table_name = 'batches' AND column_name = 'current_location_id'
+    ) LOOP
+        EXECUTE 'ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+
+    -- Drop all foreign key constraints on batch_movements(from_location_id)
+    FOR r IN (
+        SELECT constraint_name 
+        FROM information_schema.key_column_usage 
+        WHERE table_name = 'batch_movements' AND column_name = 'from_location_id'
+    ) LOOP
+        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+
+    -- Drop all foreign key constraints on batch_movements(to_location_id)
+    FOR r IN (
+        SELECT constraint_name 
+        FROM information_schema.key_column_usage 
+        WHERE table_name = 'batch_movements' AND column_name = 'to_location_id'
+    ) LOOP
+        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+END $$;
+
+-- Drop the view first to avoid column mismatch errors
+DROP VIEW IF EXISTS public.vw_trip_audit_trail;
+
+-- Create/Update the Trip Audit Trail View (Optimized with Lateral Join)
+CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
+SELECT 
+    bm.id as movement_id,
+    bm.timestamp as movement_time,
+    bm.transaction_date,
+    bm.batch_id,
+    bm.quantity,
+    bm.condition,
+    bm.route_instructions,
+    fl.name as from_location,
+    tl.name as to_location,
+    d.full_name as driver_name,
+    d.id as driver_id,
+    t.plate_number as truck_plate,
+    t.id as truck_id,
+    t.branch_id,
+    ds.id as shift_id,
+    ds.start_time as shift_start,
+    ds.end_time as shift_end,
+    ds.manual_end_time as shift_manual_end,
+    ds.notes as shift_notes
+FROM public.batch_movements bm
+LEFT JOIN public.locations fl ON bm.from_location_id = fl.id
+LEFT JOIN public.locations tl ON bm.to_location_id = tl.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id
+LEFT JOIN LATERAL (
+    SELECT * FROM public.driver_shifts s
+    WHERE s.driver_id = bm.driver_id
+    AND s.truck_id = bm.truck_id
+    AND s.start_time <= bm.timestamp
+    ORDER BY s.start_time DESC
+    LIMIT 1
+) ds ON TRUE;
+
+-- Sample Data for Audit Trail
+INSERT INTO public.branches (id, name) VALUES ('BR-001', 'Johannesburg Central') ON CONFLICT DO NOTHING;
+INSERT INTO public.locations (id, name, type, category, branch_id) VALUES ('LOC-WH-01', 'Main Warehouse', 'Warehouse', 'Home', 'BR-001') ON CONFLICT DO NOTHING;
+INSERT INTO public.locations (id, name, type, category, branch_id) VALUES ('LOC-ST-01', 'Retail Store A', 'Store', 'External', 'BR-001') ON CONFLICT DO NOTHING;
+INSERT INTO public.asset_master (id, name, type) VALUES ('SH-P01', 'Standard Pallet', 'Pallet') ON CONFLICT DO NOTHING;
+INSERT INTO public.trucks (id, plate_number, branch_id) VALUES ('TRK-001', 'GP 123 SH', 'BR-001') ON CONFLICT DO NOTHING;
+INSERT INTO public.drivers (id, full_name, branch_id) VALUES ('DRV-001', 'John Doe', 'BR-001') ON CONFLICT DO NOTHING;
+INSERT INTO public.batches (id, asset_id, quantity, current_location_id) VALUES ('B-TEST-001', 'SH-P01', 50, 'LOC-WH-01') ON CONFLICT DO NOTHING;
+
+INSERT INTO public.batch_movements (batch_id, from_location_id, to_location_id, truck_id, driver_id, quantity, route_instructions, transaction_date)
+VALUES ('B-TEST-001', 'LOC-WH-01', 'LOC-ST-01', 'TRK-001', 'DRV-001', 50, 'Deliver to back entrance. Contact manager on arrival.', CURRENT_DATE)
+ON CONFLICT DO NOTHING;
+
+-- Test Data: Create a Shift that definitely overlaps the Trip
+INSERT INTO public.driver_shifts (driver_id, truck_id, start_time, notes, branch_id)
+VALUES (
+  'DRV-001', 
+  'TRK-001', 
+  '2026-01-01 00:00:00+00', 
+  'Master Shift Assignment - Audit Verified.', 
+  'BR-001'
+) ON CONFLICT DO NOTHING;
+`}
             </pre>
             <div className="p-4 bg-amber-900/20 border border-amber-900/50 rounded-xl flex gap-4">
               <AlertTriangle className="text-amber-500 shrink-0" size={24} />
