@@ -47,7 +47,7 @@ const ReportsView: React.FC = () => {
       try {
         const [bRes, lRes, aRes, brRes, tRes] = await Promise.all([
           supabase.from('batches').select('*'),
-          supabase.from('locations').select('*'),
+          supabase.from('vw_all_sources').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('branches').select('*'),
           supabase.from('vw_master_logistics_trace')

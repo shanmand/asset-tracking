@@ -137,6 +137,7 @@ const SchemaView: React.FC = () => {
             </div>
             <pre className="text-slate-300 leading-relaxed">
 {`-- PL/pgSQL Function for Real-time Accrual Calculation
+DROP FUNCTION IF EXISTS calculate_batch_accrual(TEXT) CASCADE;
 CREATE OR REPLACE FUNCTION calculate_batch_accrual(batch_id_input TEXT)
 RETURNS NUMERIC AS $$
 DECLARE
@@ -181,6 +182,7 @@ $$ LANGUAGE plpgsql;`}
             </div>
             <pre className="text-slate-300 leading-relaxed">
 {`-- Trigger: Variance to Loss Record
+DROP FUNCTION IF EXISTS fn_on_verification_variance();
 CREATE OR REPLACE FUNCTION fn_on_verification_variance() 
 RETURNS TRIGGER AS $$
 BEGIN
@@ -252,6 +254,7 @@ CREATE TABLE IF NOT EXISTS public.thaan_slips (
 );
 
 -- 7. Accrual Engine RPC
+DROP FUNCTION IF EXISTS calculate_batch_accrual(TEXT) CASCADE;
 CREATE OR REPLACE FUNCTION calculate_batch_accrual(batch_id_input TEXT)
 RETURNS NUMERIC AS $$
 DECLARE
@@ -307,31 +310,57 @@ CREATE TABLE IF NOT EXISTS public.batch_verifications (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 10. Verification Trigger
+-- 10. Verification Trigger Function
+DROP FUNCTION IF EXISTS fn_on_verification_variance();
+CREATE OR REPLACE FUNCTION fn_on_verification_variance() 
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.variance < 0 THEN
+        INSERT INTO public.asset_losses (batch_id, loss_type, lost_quantity, timestamp, reported_by) 
+        VALUES (NEW.batch_id, 'Missing/Lost', ABS(NEW.variance), NOW(), NEW.verified_by);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 11. Verification Trigger
+DROP TRIGGER IF EXISTS tr_on_verification_variance ON public.batch_verifications;
 CREATE TRIGGER tr_on_verification_variance
 AFTER INSERT ON public.batch_verifications
 FOR EACH ROW
 EXECUTE FUNCTION fn_on_verification_variance();
 
--- 11. Create Storage Bucket for THAAN Slips
+-- 12. Create Business Parties Table
+CREATE TABLE IF NOT EXISTS public.business_parties (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    party_type TEXT NOT NULL, -- Customer, Supplier
+    contact_person TEXT,
+    email TEXT,
+    phone TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 13. Create Storage Bucket for THAAN Slips
 -- Note: This must be run in the SQL Editor. 
 -- It ensures the 'thaan-slips' bucket exists and is public.
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('thaan-slips', 'thaan-slips', true)
 ON CONFLICT (id) DO NOTHING;
 
--- 12. Storage Policies
+-- 13. Storage Policies
 -- Allow public read access to thaan-slips
-CREATE POLICY "Public Read Access"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'thaan-slips');
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Public Read Access') THEN
+        CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id = 'thaan-slips');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Authenticated Upload Access') THEN
+        CREATE POLICY "Authenticated Upload Access" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'thaan-slips');
+    END IF;
+END $$;
 
--- Allow authenticated uploads to thaan-slips
-CREATE POLICY "Authenticated Upload Access"
-ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'thaan-slips');
-
--- 13. Create Tasks Table
+-- 14. Create Tasks Table
 -- Drop old constraint if it exists from previous schema version
 ALTER TABLE IF EXISTS public.tasks DROP CONSTRAINT IF EXISTS tasks_assigned_to_fkey;
 
@@ -369,7 +398,65 @@ BEGIN
     END IF;
 END $$;
 
--- 16. Personnel View
+-- 17. All Sources View (Unifies Locations and Business Parties)
+DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
+CREATE OR REPLACE VIEW public.vw_all_sources AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    branch_id,
+    name || ' (' || partner_type || ')' as display_name,
+    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+FROM public.locations
+WHERE type != 'In Transit'
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    NULL as branch_id,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties;
+
+-- 18. Global Inventory Tracker View
+DROP VIEW IF EXISTS public.vw_global_inventory_tracker;
+CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
+SELECT 
+    b.id AS batch_id,
+    b.asset_id,
+    a.name AS asset_name,
+    b.quantity,
+    b.current_location_id,
+    s.name AS current_location,
+    s.branch_id,
+    b.status AS batch_status,
+    b.transaction_date,
+    public.calculate_batch_accrual(b.id) AS daily_accrued_liability,
+    (CURRENT_DATE - b.transaction_date) AS days_in_circulation
+FROM public.batches b
+JOIN public.asset_master a ON b.asset_id = a.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- 19. Batch Accruals View
+DROP VIEW IF EXISTS public.vw_batch_accruals;
+CREATE OR REPLACE VIEW public.vw_batch_accruals AS
+SELECT 
+    b.id as batch_id,
+    b.asset_id,
+    b.quantity,
+    b.current_location_id,
+    s.name as current_location,
+    s.branch_id,
+    b.transaction_date,
+    b.transfer_confirmed_by_customer,
+    public.calculate_batch_accrual(b.id) as accrued_amount
+FROM public.batches b
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- 20. Personnel View
+DROP VIEW IF EXISTS public.vw_assignable_personnel;
 CREATE OR REPLACE VIEW public.vw_assignable_personnel AS
 SELECT 
     id::text, 
@@ -440,10 +527,37 @@ BEGIN
     END LOOP;
 END $$;
 
+-- Create/Update the split_batch RPC
+DROP FUNCTION IF EXISTS public.split_batch(TEXT, INTEGER, TEXT, DATE);
+CREATE OR REPLACE FUNCTION public.split_batch(original_batch_id TEXT, move_qty INTEGER, new_location_id TEXT, move_date DATE)
+RETURNS TEXT AS $$
+DECLARE
+    v_new_batch_id TEXT;
+    v_asset_id TEXT;
+    v_status TEXT;
+    v_orig_qty INTEGER;
+BEGIN
+    SELECT asset_id, status, quantity INTO v_asset_id, v_status, v_orig_qty FROM public.batches WHERE id = original_batch_id;
+    IF v_orig_qty < move_qty THEN RAISE EXCEPTION 'Insufficient quantity in original batch'; END IF;
+    v_new_batch_id := original_batch_id || '-S' || floor(random() * 1000)::text;
+    UPDATE public.batches SET quantity = quantity - move_qty WHERE id = original_batch_id;
+    INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date)
+    VALUES (v_new_batch_id, v_asset_id, move_qty, new_location_id, v_status, move_date);
+
+    -- Inherit Forensic History: Copy movements from parent to child, but with the split quantity
+    INSERT INTO public.batch_movements (batch_id, from_location_id, to_location_id, truck_id, driver_id, condition, origin_user_id, quantity, transaction_date, timestamp)
+    SELECT v_new_batch_id, from_location_id, to_location_id, truck_id, driver_id, condition, origin_user_id, move_qty, transaction_date, timestamp
+    FROM public.batch_movements
+    WHERE batch_id = original_batch_id;
+
+    RETURN v_new_batch_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Drop the view first to avoid column mismatch errors
 DROP VIEW IF EXISTS public.vw_trip_audit_trail;
 
--- Create/Update the Trip Audit Trail View (Optimized with Lateral Join)
+-- Create/Update the Trip Audit Trail View (Optimized with Lateral Join and All Sources)
 CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
 SELECT 
     bm.id as movement_id,
@@ -453,8 +567,8 @@ SELECT
     bm.quantity,
     bm.condition,
     bm.route_instructions,
-    fl.name as from_location,
-    tl.name as to_location,
+    s_from.name as from_location,
+    s_to.name as to_location,
     d.full_name as driver_name,
     d.id as driver_id,
     t.plate_number as truck_plate,
@@ -466,8 +580,8 @@ SELECT
     ds.manual_end_time as shift_manual_end,
     ds.notes as shift_notes
 FROM public.batch_movements bm
-LEFT JOIN public.locations fl ON bm.from_location_id = fl.id
-LEFT JOIN public.locations tl ON bm.to_location_id = tl.id
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
 LEFT JOIN public.drivers d ON bm.driver_id = d.id
 LEFT JOIN public.trucks t ON bm.truck_id = t.id
 LEFT JOIN LATERAL (
@@ -478,6 +592,28 @@ LEFT JOIN LATERAL (
     ORDER BY s.start_time DESC
     LIMIT 1
 ) ds ON TRUE;
+
+-- Create/Update the Batch Forensics View
+DROP VIEW IF EXISTS public.vw_batch_forensics;
+CREATE OR REPLACE VIEW public.vw_batch_forensics AS
+SELECT 
+    bm.id AS movement_id,
+    bm.batch_id,
+    bm.transaction_date,
+    bm.timestamp,
+    d.full_name AS driver_name,
+    bm.quantity,
+    s_to.name AS to_location_name,
+    s_to.id AS to_location_id,
+    s_from.name AS from_location_name,
+    t.plate_number AS truck_plate,
+    bm.condition,
+    s_to.branch_id
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id;
 
 -- Sample Data for Audit Trail
 INSERT INTO public.branches (id, name) VALUES ('BR-001', 'Johannesburg Central') ON CONFLICT DO NOTHING;

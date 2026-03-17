@@ -53,7 +53,8 @@ export const normalizePayload = (payload: any): any => {
 
     // Heuristic: if key ends with _id or is 'id', cast to string
     if (key === 'id' || key.endsWith('_id')) {
-      normalized[key] = value !== null && value !== undefined ? castId(value) : null;
+      const casted = value !== null && value !== undefined ? castId(value) : null;
+      normalized[key] = casted === '' ? null : casted;
     } else if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
       normalized[key] = normalizePayload(value);
     } else {
