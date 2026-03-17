@@ -61,6 +61,7 @@ import LiabilityHeatmap from './components/LiabilityHeatmap';
 import PersonnelManagement from './components/PersonnelManagement';
 import BusinessDirectory from './components/BusinessDirectory';
 import ShiftManagement from './components/ShiftManagement';
+import TripAuditTrail from './components/TripAuditTrail';
 import FleetCompliance from './components/FleetCompliance';
 import FleetExpenseReport from './components/FleetExpenseReport';
 import DriverPortal from './components/DriverPortal';
@@ -101,7 +102,8 @@ enum NavItem {
   DRIVER_PORTAL = 'driver-portal',
   MANAGEMENT_REPORT = 'management-report',
   BUSINESS_DIRECTORY = 'business-directory',
-  BATCH_SUMMARY_REPORT = 'batch-summary-report'
+  BATCH_SUMMARY_REPORT = 'batch-summary-report',
+  TRIP_AUDIT = 'trip-audit'
 }
 
 const AppContent: React.FC = () => {
@@ -175,13 +177,14 @@ const AppContent: React.FC = () => {
       case NavItem.MANAGEMENT_REPORT: return <ManagementReportPack />;
       case NavItem.BUSINESS_DIRECTORY: return <BusinessDirectory />;
       case NavItem.BATCH_SUMMARY_REPORT: return <BatchSummaryReport />;
+      case NavItem.TRIP_AUDIT: return <TripAuditTrail />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <aside className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col fixed h-full z-10 shadow-2xl">
+      <aside className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col fixed h-full z-10 shadow-2xl print:hidden">
         <div className="p-6 flex items-center gap-3 border-b border-slate-800">
           <div className="bg-amber-500 p-2 rounded-lg shadow-lg"><Package className="text-white w-6 h-6" /></div>
           <div><h1 className="font-black text-xl leading-tight">SHUKU</h1><p className="text-[10px] text-amber-400 font-bold uppercase tracking-tighter">Lupo Bakery Pro</p></div>
@@ -195,6 +198,7 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.MANAGEMENT_REPORT} onClick={() => setActiveTab(NavItem.MANAGEMENT_REPORT)} icon={<FileText size={18} />} label="Management Report Pack" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Daily Operations</div>
+          <SidebarButton active={activeTab === NavItem.TRIP_AUDIT} onClick={() => setActiveTab(NavItem.TRIP_AUDIT)} icon={<HistoryIcon size={18} />} label="Trip Audit Trail" />
           <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => { setPendingAssignment(null); setActiveTab(NavItem.LOGISTICS); }} icon={<ClipboardList size={18} />} label="Capture Movement" />
           <SidebarButton active={activeTab === NavItem.COLLECTION_REQUESTS} onClick={() => setActiveTab(NavItem.COLLECTION_REQUESTS)} icon={<ArrowDownToLine size={18} />} label="Collection Requests" />
           <SidebarButton active={activeTab === NavItem.BATCH_MANAGEMENT} onClick={() => setActiveTab(NavItem.BATCH_MANAGEMENT)} icon={<ArrowDownToLine size={18} />} label="Inventory Intake" />
@@ -245,8 +249,8 @@ const AppContent: React.FC = () => {
         </div>
       </aside>
 
-      <main className="ml-64 flex-1 flex flex-col min-h-screen">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-20 shadow-sm">
+      <main className="ml-64 flex-1 flex flex-col min-h-screen print:ml-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-20 shadow-sm print:hidden">
           <h2 className="font-black text-sm text-slate-800 uppercase tracking-widest">{activeTab.replace('-', ' ')}</h2>
           
           <div className="flex items-center gap-6">

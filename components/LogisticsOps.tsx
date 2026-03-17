@@ -36,6 +36,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
   const [isInternal, setIsInternal] = useState(false);
   const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([]);
   const [condition, setCondition] = useState(MovementCondition.CLEAN);
+  const [routeInstructions, setRouteInstructions] = useState('');
   const [movementDate, setMovementDate] = useState(new Date().toISOString().split('T')[0]);
   const [thaanFile, setThaanFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -265,6 +266,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
             truck_id: isInternal ? null : truckId,
             driver_id: isInternal ? null : driverId,
             quantity: item.quantity,
+            route_instructions: routeInstructions,
             timestamp: new Date(movementDate).toISOString(),
             condition: condition,
             origin_user_id: currentUser.id
@@ -354,6 +356,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
         setAssets([{ assetId: assetsMaster[0].id, quantity: 0 }]);
       }
       setThaanFile(null);
+      setRouteInstructions('');
       fetchData(); // Refresh data
     } catch (err: any) {
       console.error("Movement capture error:", err);
@@ -550,6 +553,20 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                         onChange={e => setMovementDate(e.target.value)}
                       />
                     </div>
+                  </div>
+
+                  {/* Route & Instructions */}
+                  <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={16} className="text-slate-400" />
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">Route & Instructions</h4>
+                    </div>
+                    <textarea 
+                      className="w-full bg-white border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900 min-h-[80px]"
+                      placeholder="Enter specific route details or delivery instructions..."
+                      value={routeInstructions}
+                      onChange={e => setRouteInstructions(e.target.value)}
+                    />
                   </div>
 
                   {/* Condition Selection */}

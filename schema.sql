@@ -150,6 +150,8 @@ CREATE TABLE public.driver_shifts (
     truck_id TEXT REFERENCES public.trucks(id),
     start_time TIMESTAMPTZ DEFAULT NOW(),
     end_time TIMESTAMPTZ,
+    manual_end_time TIMESTAMPTZ,
+    notes TEXT,
     branch_id TEXT REFERENCES public.branches(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -197,6 +199,7 @@ CREATE TABLE public.batch_movements (
     truck_id TEXT REFERENCES public.trucks(id),
     driver_id TEXT REFERENCES public.drivers(id),
     condition TEXT DEFAULT 'Clean',
+    route_instructions TEXT,
     origin_user_id UUID REFERENCES public.users(id),
     quantity INTEGER,
     transaction_date DATE DEFAULT CURRENT_DATE,
@@ -976,3 +979,30 @@ INSERT INTO public.claims (id, batch_id, type, amount_claimed_zar, status) VALUE
 ('CLM-001', 'B-DISP-001', 'Damaged', 2500.00, 'Lodged'),
 ('CLM-002', 'B-DISP-002', 'Dirty', 1200.00, 'Under Assessment')
 ON CONFLICT DO NOTHING;
+
+CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
+SELECT 
+    bm.id as movement_id,
+    bm.timestamp as movement_time,
+    bm.batch_id,
+    bm.quantity,
+    bm.condition,
+    bm.route_instructions,
+    fl.name as from_location,
+    tl.name as to_location,
+    d.full_name as driver_name,
+    d.id as driver_id,
+    t.plate_number as truck_plate,
+    t.id as truck_id,
+    ds.start_time as shift_start,
+    ds.end_time as shift_end,
+    ds.manual_end_time as shift_manual_end,
+    ds.notes as shift_notes
+FROM public.batch_movements bm
+LEFT JOIN public.locations fl ON bm.from_location_id = fl.id
+LEFT JOIN public.locations tl ON bm.to_location_id = tl.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id
+LEFT JOIN public.driver_shifts ds ON bm.driver_id = ds.driver_id 
+    AND bm.timestamp >= ds.start_time 
+    AND (bm.timestamp <= ds.end_time OR ds.end_time IS NULL);

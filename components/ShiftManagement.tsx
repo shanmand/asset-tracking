@@ -13,7 +13,9 @@ import {
   X,
   Loader2,
   ArrowRight,
-  UserCheck
+  UserCheck,
+  Printer,
+  FileText
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Truck, Driver, Branch } from '../types';
@@ -25,6 +27,8 @@ interface DriverShift {
   truck_id: string;
   start_time: string;
   end_time: string | null;
+  manual_end_time: string | null;
+  notes: string | null;
   branch_id: string;
   created_at: string;
 }
@@ -36,13 +40,26 @@ const ShiftManagement: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [closeShiftData, setCloseShiftData] = useState({
+    manualEndTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    notes: ''
+  });
   const [newShift, setNewShift] = useState({
     driver_id: '',
     truck_id: '',
-    branch_id: ''
+    branch_id: '',
+    date: new Date().toISOString().split('T')[0],
+    startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    endTime: ''
   });
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) {
@@ -77,10 +94,15 @@ const ShiftManagement: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      // End any existing active shifts for this driver or truck
+      const startTime = new Date(`${newShift.date}T${newShift.startTime}`).toISOString();
+      const endTime = newShift.endTime ? new Date(`${newShift.date}T${newShift.endTime}`).toISOString() : null;
+
+      // End any existing active shifts for this driver or truck if we are starting a "Now" shift
+      // or if the user explicitly wants to clear them.
+      // For simplicity, we'll keep the auto-end logic but use the provided start time.
       await supabase
         .from('driver_shifts')
-        .update({ end_time: new Date().toISOString() })
+        .update({ end_time: startTime })
         .is('end_time', null)
         .or(`driver_id.eq.${newShift.driver_id},truck_id.eq.${newShift.truck_id}`);
 
@@ -90,13 +112,21 @@ const ShiftManagement: React.FC = () => {
           driver_id: newShift.driver_id,
           truck_id: newShift.truck_id,
           branch_id: newShift.branch_id || null,
-          start_time: new Date().toISOString()
+          start_time: startTime,
+          end_time: endTime
         }]);
 
       if (error) throw error;
       await fetchData();
       setIsModalOpen(false);
-      setNewShift({ driver_id: '', truck_id: '', branch_id: '' });
+      setNewShift({ 
+        driver_id: '', 
+        truck_id: '', 
+        branch_id: '',
+        date: new Date().toISOString().split('T')[0],
+        startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+        endTime: ''
+      });
     } catch (err: any) {
       console.error("Start Shift Error:", err);
       alert(err.message);
@@ -105,16 +135,36 @@ const ShiftManagement: React.FC = () => {
     }
   };
 
-  const handleEndShift = async (id: string) => {
+  const handleCloseShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedShiftId) return;
+    setIsLoading(true);
     try {
+      const shift = shifts.find(s => s.id === selectedShiftId);
+      if (!shift) throw new Error("Shift not found");
+
+      const datePart = new Date(shift.start_time).toISOString().split('T')[0];
+      const manualEndTime = new Date(`${datePart}T${closeShiftData.manualEndTime}`).toISOString();
+
       const { error } = await supabase
         .from('driver_shifts')
-        .update({ end_time: new Date().toISOString() })
-        .eq('id', id);
+        .update({ 
+          end_time: new Date().toISOString(),
+          manual_end_time: manualEndTime,
+          notes: closeShiftData.notes
+        })
+        .eq('id', selectedShiftId);
+
       if (error) throw error;
       await fetchData();
-    } catch (err) {
-      console.error("End Shift Error:", err);
+      setIsCloseModalOpen(false);
+      setSelectedShiftId(null);
+      setCloseShiftData({ manualEndTime: '', notes: '' });
+    } catch (err: any) {
+      console.error("Close Shift Error:", err);
+      alert(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -129,12 +179,20 @@ const ShiftManagement: React.FC = () => {
           <h3 className="text-2xl font-black text-slate-900 tracking-tight">Shift Assignments</h3>
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Daily Driver-to-Truck Allocation</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-        >
-          <Plus size={18} /> START NEW SHIFT
-        </button>
+        <div className="flex gap-4 print:hidden">
+          <button 
+            onClick={handlePrint}
+            className="px-6 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
+          >
+            <Printer size={18} /> PRINT REPORT
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+          >
+            <Plus size={18} /> START NEW SHIFT
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -188,14 +246,25 @@ const ShiftManagement: React.FC = () => {
 
                   <div className="flex flex-col items-end gap-2">
                     <div className="text-right">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Shift Date</p>
+                      <p className="text-sm font-bold text-slate-900">{new Date(shift.start_time).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Started At</p>
                       <p className="text-sm font-bold text-slate-900">{new Date(shift.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                     <button 
-                      onClick={() => handleEndShift(shift.id)}
-                      className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100"
+                      onClick={() => {
+                        setSelectedShiftId(shift.id);
+                        setCloseShiftData({
+                          manualEndTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+                          notes: ''
+                        });
+                        setIsCloseModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100 print:hidden"
                     >
-                      End Shift
+                      Close Shift
                     </button>
                   </div>
                 </div>
@@ -252,6 +321,39 @@ const ShiftManagement: React.FC = () => {
             </div>
             
             <form onSubmit={handleStartShift} className="p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Shift Date</label>
+                  <input 
+                    type="date"
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                    value={newShift.date}
+                    onChange={e => setNewShift({...newShift, date: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Start Time</label>
+                  <input 
+                    type="time"
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                    value={newShift.startTime}
+                    onChange={e => setNewShift({...newShift, startTime: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">End Time (Optional)</label>
+                <input 
+                  type="time"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={newShift.endTime}
+                  onChange={e => setNewShift({...newShift, endTime: e.target.value})}
+                />
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Select Driver</label>
                 <select 
@@ -300,6 +402,52 @@ const ShiftManagement: React.FC = () => {
                 className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 mt-4 flex items-center justify-center gap-2"
               >
                 {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'START SHIFT NOW'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Close Shift Modal */}
+      {isCloseModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">Close Shift</h4>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Finalize Daily Log</p>
+              </div>
+              <button onClick={() => setIsCloseModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            </div>
+            
+            <form onSubmit={handleCloseShift} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Manual End Time</label>
+                <input 
+                  type="time"
+                  required
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={closeShiftData.manualEndTime}
+                  onChange={e => setCloseShiftData({...closeShiftData, manualEndTime: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Shift Notes</label>
+                <textarea 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900 min-h-[100px]"
+                  placeholder="Enter any notes about the shift (e.g., delays, issues)..."
+                  value={closeShiftData.notes}
+                  onChange={e => setCloseShiftData({...closeShiftData, notes: e.target.value})}
+                />
+              </div>
+              
+              <button 
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-rose-600 text-white font-black py-5 rounded-2xl hover:bg-rose-700 transition-all shadow-xl shadow-rose-200 mt-4 flex items-center justify-center gap-2"
+              >
+                {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'CLOSE SHIFT & SAVE'}
               </button>
             </form>
           </div>
