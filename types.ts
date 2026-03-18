@@ -126,6 +126,8 @@ export interface MovementDestination {
   name: string;
   partner_type: string;
   display_name: string;
+  type?: string;
+  category?: string;
 }
 
 export interface Source {
@@ -135,6 +137,8 @@ export interface Source {
   display_name: string;
   sort_group: number;
   branch_id?: string;
+  type?: string;
+  category?: string;
 }
 
 export interface Truck {
@@ -213,8 +217,13 @@ export interface Batch {
   asset_id: string;
   quantity: number;
   current_location_id: string;
-  created_at: string;
+  branch_id?: string;
   status: 'Pending' | 'Success' | 'Lost' | 'In-Transit' | 'Settled';
+  created_at: string;
+  asset_name?: string;
+  daily_accrued_liability?: number;
+  daily_rental_fee?: number;
+  days_in_circulation?: number;
   is_settled?: boolean;
   settled_at?: string;
   transaction_date?: string;

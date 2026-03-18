@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User as UserIcon, History as HistoryIcon, UserCheck, Skull, MapPin, Loader2, Info } from 'lucide-react';
+import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User as UserIcon, History as HistoryIcon, UserCheck, Skull, MapPin, Loader2, Info, Zap } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
 import { LocationType, UserRole, User as UserType, Batch, AssetLoss, Location, User as DBUser, AssetMaster, Claim } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -60,7 +60,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           rawInventory: inventoryRes.data?.slice(0, 2)
         });
 
-        if (inventoryRes.data) {
+        if (inventoryRes.data && inventoryRes.data.length > 0) {
           // Map view columns back to Batch type for compatibility or use directly
           const mappedBatches = inventoryRes.data.map((item: any) => {
             const txDate = new Date(item.transaction_date);
@@ -90,16 +90,36 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           // De-duplicate batches
           const uniqueBatches = Array.from(new Map(mappedBatches.map((item: any) => [item.id, item])).values());
           setDbBatches(uniqueBatches as any);
+        } else {
+          setDbBatches(MOCK_BATCHES);
         }
-        if (lossesRes.data) setDbLosses(lossesRes.data);
-        if (locsRes.data) {
+        if (lossesRes.data && lossesRes.data.length > 0) {
+          setDbLosses(lossesRes.data);
+        } else {
+          setDbLosses(MOCK_LOSSES);
+        }
+        if (locsRes.data && locsRes.data.length > 0) {
           // De-duplicate locations
           const uniqueLocs = Array.from(new Map(locsRes.data.map((item: any) => [item.id, item])).values());
           setDbLocations(uniqueLocs);
+        } else {
+          setDbLocations(MOCK_LOCATIONS);
         }
-        if (usersRes.data) setDbUsers(usersRes.data);
-        if (assetsRes.data) setDbAssets(assetsRes.data);
-        if (claimsRes.data) setDbClaims(claimsRes.data);
+        if (usersRes.data && usersRes.data.length > 0) {
+          setDbUsers(usersRes.data);
+        } else {
+          setDbUsers(MOCK_USERS);
+        }
+        if (assetsRes.data && assetsRes.data.length > 0) {
+          setDbAssets(assetsRes.data);
+        } else {
+          setDbAssets(MOCK_ASSETS);
+        }
+        if (claimsRes.data && claimsRes.data.length > 0) {
+          setDbClaims(claimsRes.data);
+        } else {
+          setDbClaims(MOCK_CLAIMS);
+        }
         
         // Handle branches with fallback
         if (branchesRes.error) {
@@ -182,6 +202,54 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const handleSeedDatabase = async () => {
+    if (!isSupabaseConfigured) return;
+    setIsLoading(true);
+    try {
+      console.log('Seeding database with mock data...');
+      // Insert branches
+      const branches = ['Kya Sands', 'Durban'];
+      await supabase.from('branches').upsert(branches.map(id => ({ id, name: id })));
+      
+      // Insert locations
+      await supabase.from('locations').upsert(MOCK_LOCATIONS.map(l => ({
+        id: l.id,
+        name: l.name,
+        type: l.type,
+        category: l.category,
+        branch_id: l.branch_id,
+        partner_type: l.partner_type
+      })));
+
+      // Insert assets
+      await supabase.from('asset_master').upsert(MOCK_ASSETS.map(a => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        dimensions: a.dimensions,
+        material: a.material
+      })));
+
+      // Insert batches
+      await supabase.from('batches').upsert(MOCK_BATCHES.map(b => ({
+        id: b.id,
+        asset_id: b.asset_id,
+        quantity: b.quantity,
+        current_location_id: b.current_location_id,
+        status: b.status,
+        created_at: b.created_at
+      })));
+
+      alert('Database seeded successfully! Refreshing...');
+      window.location.reload();
+    } catch (err) {
+      console.error('Error seeding database:', err);
+      alert('Failed to seed database. Check console.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -211,6 +279,26 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
             className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
           >
             Go to SQL Migrations
+          </button>
+        </div>
+      )}
+
+      {isSupabaseConfigured && displayBatches.length === 0 && (
+        <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-3xl flex items-center justify-between gap-6 shadow-xl shadow-blue-100/50">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+              <Zap size={24} />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Empty Database Detected</h4>
+              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1">Would you like to seed your database with mock data for testing?</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleSeedDatabase}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg"
+          >
+            Seed Database
           </button>
         </div>
       )}

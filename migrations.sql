@@ -377,7 +377,7 @@ GROUP BY 1, 2, 3;
 -- 14. Synchronize Views for Business Parties
 -- ==========================================
 
--- Update vw_all_sources to include branch_id and In Transit locations
+-- Update vw_all_sources to include branch_id, type, category and In Transit locations
 DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
 CREATE OR REPLACE VIEW public.vw_all_sources AS
 SELECT 
@@ -385,6 +385,8 @@ SELECT
     name,
     partner_type,
     branch_id,
+    type,
+    category,
     name || ' (' || partner_type || ')' as display_name,
     CASE 
         WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
@@ -398,6 +400,8 @@ SELECT
     name,
     party_type as partner_type,
     NULL as branch_id,
+    'Business Party' as type,
+    'External' as category,
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group
 FROM public.business_parties;

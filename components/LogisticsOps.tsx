@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock, Info } from 'lucide-react';
-import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS } from '../constants';
+import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS } from '../constants';
 import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { normalizePayload, castId } from '../supabaseUtils';
@@ -47,11 +47,28 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) {
-      setLocations([]);
-      setBatches([]);
-      setTrucks([]);
-      setDrivers([]);
-      setAssetsMaster([]);
+      setLocations(MOCK_LOCATIONS);
+      setOrigins(MOCK_LOCATIONS.map(l => ({
+        id: l.id,
+        name: l.name,
+        partner_type: l.partner_type,
+        display_name: `${l.name} (${l.partner_type})`,
+        sort_group: l.category === 'Home' ? 1 : (l.type === LocationType.IN_TRANSIT ? 3 : 2),
+        type: l.type,
+        category: l.category
+      })));
+      setDestinations(MOCK_LOCATIONS.map(l => ({
+        id: l.id,
+        name: l.name,
+        partner_type: l.partner_type,
+        display_name: `${l.name} (${l.partner_type})`,
+        type: l.type,
+        category: l.category
+      })));
+      setBatches(MOCK_BATCHES);
+      setTrucks(MOCK_TRUCKS);
+      setDrivers(MOCK_DRIVERS);
+      setAssetsMaster(MOCK_ASSETS);
       setIsLoading(false);
       return;
     }
@@ -78,39 +95,68 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
       });
 
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
-      if (locsRes.data) {
+      if (locsRes.data && locsRes.data.length > 0) {
         const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
         setLocations(uniqueLocs);
+      } else {
+        setLocations(MOCK_LOCATIONS);
       }
-      if (originsRes.data) {
+      if (originsRes.data && originsRes.data.length > 0) {
         const uniqueOrigins = Array.from(new Map(originsRes.data.map(item => [item.id, item])).values());
         setOrigins(uniqueOrigins);
         if (uniqueOrigins.length > 0) {
           setOrigin(uniqueOrigins[0].id);
         }
+      } else {
+        setOrigins(MOCK_LOCATIONS.map(l => ({
+          id: l.id,
+          name: l.name,
+          partner_type: l.partner_type,
+          display_name: `${l.name} (${l.partner_type})`,
+          sort_group: l.category === 'Home' ? 1 : (l.type === LocationType.IN_TRANSIT ? 3 : 2),
+          type: l.type,
+          category: l.category
+        })));
       }
-      if (destsRes.data) {
+      if (destsRes.data && destsRes.data.length > 0) {
         const uniqueDests = Array.from(new Map(destsRes.data.map(item => [item.id, item])).values());
         setDestinations(uniqueDests);
         if (uniqueDests.length > 0) {
           setDestination(uniqueDests[0].id);
         }
+      } else {
+        setDestinations(MOCK_LOCATIONS.map(l => ({
+          id: l.id,
+          name: l.name,
+          partner_type: l.partner_type,
+          display_name: `${l.name} (${l.partner_type})`,
+          type: l.type,
+          category: l.category
+        })));
       }
-      if (batchesRes.data) {
+      if (batchesRes.data && batchesRes.data.length > 0) {
         const uniqueBatches = Array.from(new Map(batchesRes.data.map(item => [item.id, item])).values());
         setBatches(uniqueBatches);
+      } else {
+        setBatches(MOCK_BATCHES);
       }
-      if (trucksRes.data) {
+      if (trucksRes.data && trucksRes.data.length > 0) {
         setTrucks(trucksRes.data);
         if (trucksRes.data.length > 0) setTruckId(trucksRes.data[0].id);
+      } else {
+        setTrucks(MOCK_TRUCKS);
       }
-      if (driversRes.data) {
+      if (driversRes.data && driversRes.data.length > 0) {
         setDrivers(driversRes.data);
         if (driversRes.data.length > 0) setDriverId(driversRes.data[0].id);
+      } else {
+        setDrivers(MOCK_DRIVERS);
       }
-      if (assetsRes.data) {
+      if (assetsRes.data && assetsRes.data.length > 0) {
         setAssetsMaster(assetsRes.data);
         if (assetsRes.data.length > 0) setAssets([{ assetId: assetsRes.data[0].id, quantity: 0 }]);
+      } else {
+        setAssetsMaster(MOCK_ASSETS);
       }
     } catch (err) {
       console.error("Error fetching logistics data:", err);
@@ -428,15 +474,13 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     <optgroup label="Internal Facilities">
                       {locations.filter(l => l.category === 'Home').map(l => <option key={`origin-home-${l.id}`} value={l.id}>{l.name}</option>)}
                     </optgroup>
-                    {!isInternal && (
-                      <optgroup label="Customers & Partners">
-                        {origins
-                          .filter(o => !locations.some(l => l.id === o.id && l.category === 'Home') && !locations.some(l => l.id === o.id && l.type === LocationType.IN_TRANSIT))
-                          .map(o => <option key={`origin-partner-${o.id}`} value={o.id}>{o.display_name}</option>)}
-                      </optgroup>
-                    )}
+                    <optgroup label="Customers & Partners">
+                      {!isInternal && origins
+                        .filter(o => o.category !== 'Home' && o.type !== LocationType.IN_TRANSIT)
+                        .map(o => <option key={`origin-partner-${o.id}`} value={o.id}>{o.display_name}</option>)}
+                    </optgroup>
                     <optgroup label="Trucks (In-Transit)">
-                      {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={`origin-transit-${l.id}`} value={l.id}>{l.name}</option>)}
+                      {origins.filter(o => o.type === LocationType.IN_TRANSIT).map(o => <option key={`origin-transit-${o.id}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                   </select>
                 </label>
@@ -453,15 +497,13 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     <optgroup label="Internal Facilities">
                       {locations.filter(l => l.category === 'Home').map(l => <option key={`dest-home-${l.id}`} value={l.id}>{l.name}</option>)}
                     </optgroup>
-                    {!isInternal && (
-                      <optgroup label="Customers & Partners">
-                        {destinations
-                          .filter(d => !locations.some(l => l.id === d.id && l.category === 'Home'))
-                          .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
-                      </optgroup>
-                    )}
+                    <optgroup label="Customers & Partners">
+                      {!isInternal && destinations
+                        .filter(d => d.category !== 'Home' && d.type !== LocationType.IN_TRANSIT)
+                        .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
+                    </optgroup>
                     <optgroup label="Trucks (In-Transit)">
-                      {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={`dest-transit-${l.id}`} value={l.id}>{l.name}</option>)}
+                      {destinations.filter(d => d.type === LocationType.IN_TRANSIT).map(d => <option key={`dest-transit-${d.id}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                   </select>
                 </label>
