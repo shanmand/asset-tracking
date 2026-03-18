@@ -407,9 +407,12 @@ SELECT
     partner_type,
     branch_id,
     name || ' (' || partner_type || ')' as display_name,
-    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    CASE 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
+        ELSE 2 
+    END as sort_group
 FROM public.locations
-WHERE type != 'In Transit'
 UNION ALL
 SELECT 
     id::text,

@@ -377,7 +377,7 @@ GROUP BY 1, 2, 3;
 -- 14. Synchronize Views for Business Parties
 -- ==========================================
 
--- Update vw_all_sources to include branch_id
+-- Update vw_all_sources to include branch_id and In Transit locations
 DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
 CREATE OR REPLACE VIEW public.vw_all_sources AS
 SELECT 
@@ -386,9 +386,12 @@ SELECT
     partner_type,
     branch_id,
     name || ' (' || partner_type || ')' as display_name,
-    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    CASE 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
+        ELSE 2 
+    END as sort_group
 FROM public.locations
-WHERE type != 'In Transit'
 UNION ALL
 SELECT 
     id::text,
