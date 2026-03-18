@@ -217,13 +217,8 @@ export interface Batch {
   asset_id: string;
   quantity: number;
   current_location_id: string;
-  branch_id?: string;
-  status: 'Pending' | 'Success' | 'Lost' | 'In-Transit' | 'Settled';
   created_at: string;
-  asset_name?: string;
-  daily_accrued_liability?: number;
-  daily_rental_fee?: number;
-  days_in_circulation?: number;
+  status: 'Pending' | 'Success' | 'Lost' | 'In-Transit' | 'Settled';
   is_settled?: boolean;
   settled_at?: string;
   transaction_date?: string;

@@ -95,68 +95,39 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
       });
 
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
-      if (locsRes.data && locsRes.data.length > 0) {
+      if (locsRes.data) {
         const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
         setLocations(uniqueLocs);
-      } else {
-        setLocations(MOCK_LOCATIONS);
       }
-      if (originsRes.data && originsRes.data.length > 0) {
+      if (originsRes.data) {
         const uniqueOrigins = Array.from(new Map(originsRes.data.map(item => [item.id, item])).values());
         setOrigins(uniqueOrigins);
         if (uniqueOrigins.length > 0) {
           setOrigin(uniqueOrigins[0].id);
         }
-      } else {
-        setOrigins(MOCK_LOCATIONS.map(l => ({
-          id: l.id,
-          name: l.name,
-          partner_type: l.partner_type,
-          display_name: `${l.name} (${l.partner_type})`,
-          sort_group: l.category === 'Home' ? 1 : (l.type === LocationType.IN_TRANSIT ? 3 : 2),
-          type: l.type,
-          category: l.category
-        })));
       }
-      if (destsRes.data && destsRes.data.length > 0) {
+      if (destsRes.data) {
         const uniqueDests = Array.from(new Map(destsRes.data.map(item => [item.id, item])).values());
         setDestinations(uniqueDests);
         if (uniqueDests.length > 0) {
           setDestination(uniqueDests[0].id);
         }
-      } else {
-        setDestinations(MOCK_LOCATIONS.map(l => ({
-          id: l.id,
-          name: l.name,
-          partner_type: l.partner_type,
-          display_name: `${l.name} (${l.partner_type})`,
-          type: l.type,
-          category: l.category
-        })));
       }
-      if (batchesRes.data && batchesRes.data.length > 0) {
+      if (batchesRes.data) {
         const uniqueBatches = Array.from(new Map(batchesRes.data.map(item => [item.id, item])).values());
         setBatches(uniqueBatches);
-      } else {
-        setBatches(MOCK_BATCHES);
       }
-      if (trucksRes.data && trucksRes.data.length > 0) {
+      if (trucksRes.data) {
         setTrucks(trucksRes.data);
         if (trucksRes.data.length > 0) setTruckId(trucksRes.data[0].id);
-      } else {
-        setTrucks(MOCK_TRUCKS);
       }
-      if (driversRes.data && driversRes.data.length > 0) {
+      if (driversRes.data) {
         setDrivers(driversRes.data);
         if (driversRes.data.length > 0) setDriverId(driversRes.data[0].id);
-      } else {
-        setDrivers(MOCK_DRIVERS);
       }
-      if (assetsRes.data && assetsRes.data.length > 0) {
+      if (assetsRes.data) {
         setAssetsMaster(assetsRes.data);
         if (assetsRes.data.length > 0) setAssets([{ assetId: assetsRes.data[0].id, quantity: 0 }]);
-      } else {
-        setAssetsMaster(MOCK_ASSETS);
       }
     } catch (err) {
       console.error("Error fetching logistics data:", err);

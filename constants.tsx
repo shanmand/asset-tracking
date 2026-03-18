@@ -28,16 +28,16 @@ export const MOCK_ASSETS: AssetMaster[] = [
 ];
 
 export const MOCK_LOCATIONS: Location[] = [
-  { id: 'LOC-JHB-01', name: 'Lupo JHB Main Plant (Kya Sands)', type: LocationType.CRATES_DEPT, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL, branch_id: 'Kya Sands' },
-  { id: 'LOC-CPT-01', name: 'Lupo CPT Distribution Hub', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL, branch_id: 'Kya Sands' },
-  { id: 'LOC-DBN-01', name: 'Lupo KZN Depot', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL, branch_id: 'Durban' },
+  { id: 'LOC-JHB-01', name: 'Lupo JHB Main Plant (Kya Sands)', type: LocationType.CRATES_DEPT, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-CPT-01', name: 'Lupo CPT Distribution Hub', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-DBN-01', name: 'Lupo KZN Depot', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
   { id: 'LOC-CUST-01', name: 'Pick n Pay Hyper Woodmead', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
   { id: 'LOC-CUST-02', name: 'Spar Kyalami', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
   { id: 'LOC-CUST-03', name: 'Checkers Sandton', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
   { id: 'LOC-TRANS-01', name: 'Truck GP 22 SH (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
   { id: 'LOC-TRANS-02', name: 'Truck CA 99 LU (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
   { id: 'LOC-SUP-01', name: 'SHUKU Asset Recovery Yard', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL, partner_type: PartnerType.SUPPLIER },
-  { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'Kya Sands' },
+  { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
 ];
 
 export const MOCK_FEES: FeeSchedule[] = [
@@ -69,7 +69,6 @@ const generateMockData = () => {
       asset_id: assetId,
       quantity: qty,
       current_location_id: locId,
-      branch_id: branchId,
       created_at: date,
       status: Math.random() > 0.1 ? 'Success' : 'Pending'
     });
