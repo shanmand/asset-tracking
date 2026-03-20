@@ -44,7 +44,6 @@ import ClaimsManager from './components/ClaimsManager';
 import LogisticsOps from './components/LogisticsOps';
 import CollectionRequests from './components/CollectionRequests';
 import InventoryDashboard from './components/InventoryDashboard';
-import InventoryMap from './components/InventoryMap';
 import FinancialReport from './components/FinancialReport';
 import LossRecorder from './components/LossRecorder';
 import SupplierSettlementReport from './components/SupplierSettlementReport';
@@ -61,7 +60,6 @@ import ReportsView from './components/ReportsView';
 import TaskManagement from './components/TaskManagement';
 import StockTakeModule from './components/StockTakeModule';
 import SettlementModule from './components/SettlementModule';
-import LiabilityHeatmap from './components/LiabilityHeatmap';
 import PersonnelManagement from './components/PersonnelManagement';
 import BusinessDirectory from './components/BusinessDirectory';
 import ShiftManagement from './components/ShiftManagement';
@@ -80,7 +78,6 @@ enum NavItem {
   DASHBOARD = 'dashboard',
   EXECUTIVE_REPORT = 'executive-report',
   INVENTORY = 'inventory',
-  INVENTORY_MAP = 'inventory-map',
   FINANCIALS = 'financials',
   SETTLEMENT = 'settlement',
   SUPPLIER_RECON = 'supplier-recon',
@@ -102,7 +99,6 @@ enum NavItem {
   TASKS = 'tasks',
   STOCK_TAKE = 'stock-take',
   FINANCE_SETTLEMENT = 'finance-settlement',
-  LIABILITY_HEATMAP = 'liability-heatmap',
   PERSONNEL = 'personnel',
   SHIFTS = 'shifts',
   COMPLIANCE = 'compliance',
@@ -145,7 +141,6 @@ const AppContent: React.FC = () => {
       case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} onSchemaFix={() => setActiveTab(NavItem.SCHEMA)} />;
       case NavItem.EXECUTIVE_REPORT: return <ExecutiveReport />;
       case NavItem.INVENTORY: return <InventoryDashboard />;
-      case NavItem.INVENTORY_MAP: return <InventoryMap />;
       case NavItem.FINANCIALS: return <FinancialReport branchContext={currentBranchContext as any} />;
       case NavItem.SETTLEMENT: return <SupplierSettlementReport isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.SUPPLIER_RECON: return <SupplierRecon />;
@@ -180,7 +175,6 @@ const AppContent: React.FC = () => {
       case NavItem.TASKS: return <TaskManagement onStartStockTake={(locId) => { setPreselectedStockTakeLocation(locId); setActiveTab(NavItem.STOCK_TAKE); }} />;
       case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialLocationId={preselectedStockTakeLocation} />;
       case NavItem.FINANCE_SETTLEMENT: return <SettlementModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
-      case NavItem.LIABILITY_HEATMAP: return <LiabilityHeatmap />;
       case NavItem.PERSONNEL: return <PersonnelManagement />;
       case NavItem.SHIFTS: return <ShiftManagement />;
       case NavItem.COMPLIANCE: return <FleetCompliance />;
@@ -224,7 +218,6 @@ const AppContent: React.FC = () => {
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Inventory & Assets</div>
           <SidebarButton active={activeTab === NavItem.INVENTORY} onClick={() => setActiveTab(NavItem.INVENTORY)} icon={<Globe size={18} />} label="Inventory" />
-          <SidebarButton active={activeTab === NavItem.INVENTORY_MAP} onClick={() => setActiveTab(NavItem.INVENTORY_MAP)} icon={<MapPin size={18} />} label="Inventory Map" />
           <SidebarButton active={activeTab === NavItem.ASSETS} onClick={() => setActiveTab(NavItem.ASSETS)} icon={<Tags size={18} />} label="Asset Master" />
           <SidebarButton active={activeTab === NavItem.STOCK_TAKE} onClick={() => setActiveTab(NavItem.STOCK_TAKE)} icon={<ClipboardCheck size={18} />} label="Stock Take Recon" />
           <SidebarButton active={activeTab === NavItem.LOSSES} onClick={() => setActiveTab(NavItem.LOSSES)} icon={<Skull size={18} />} label="Record a Loss" />
@@ -235,7 +228,6 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.FINANCE_SETTLEMENT} onClick={() => setActiveTab(NavItem.FINANCE_SETTLEMENT)} icon={<Receipt size={18} />} label="Finance Settlement" />
           <SidebarButton active={activeTab === NavItem.PAYMENT_SETTLEMENT} onClick={() => setActiveTab(NavItem.PAYMENT_SETTLEMENT)} icon={<DollarSign size={18} />} label="Payment Settlement" />
           <SidebarButton active={activeTab === NavItem.CLAIMS} onClick={() => setActiveTab(NavItem.CLAIMS)} icon={<Gavel size={18} />} label="Claims Centre" />
-          <SidebarButton active={activeTab === NavItem.LIABILITY_HEATMAP} onClick={() => setActiveTab(NavItem.LIABILITY_HEATMAP)} icon={<Flame size={18} />} label="Liability Heatmap" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Fleet & Personnel</div>
           <SidebarButton active={activeTab === NavItem.COMPLIANCE} onClick={() => setActiveTab(NavItem.COMPLIANCE)} icon={<ShieldCheck size={18} />} label="Fleet Readiness" />
