@@ -425,19 +425,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     value={origin}
                     onChange={e => setOrigin(e.target.value)}
                   >
-                    <optgroup label="Internal Facilities">
-                      {locations.filter(l => l.category === 'Home').map(l => <option key={`origin-home-${l.id}`} value={l.id}>{l.name}</option>)}
-                    </optgroup>
-                    {!isInternal && (
-                      <optgroup label="Customers & Partners">
-                        {origins
-                          .filter(o => !locations.some(l => l.id === o.id && l.category === 'Home') && !locations.some(l => l.id === o.id && l.type === LocationType.IN_TRANSIT))
-                          .map(o => <option key={`origin-partner-${o.id}`} value={o.id}>{o.display_name}</option>)}
-                      </optgroup>
-                    )}
-                    <optgroup label="Trucks (In-Transit)">
-                      {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={`origin-transit-${l.id}`} value={l.id}>{l.name}</option>)}
-                    </optgroup>
+                    {origins.map(o => <option key={`origin-${o.id}`} value={o.id}>{o.display_name}</option>)}
                   </select>
                 </label>
                 <label className="block space-y-2">
@@ -454,15 +442,17 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                       {locations.filter(l => l.category === 'Home').map(l => <option key={`dest-home-${l.id}`} value={l.id}>{l.name}</option>)}
                     </optgroup>
                     {!isInternal && (
-                      <optgroup label="Customers & Partners">
-                        {destinations
-                          .filter(d => !locations.some(l => l.id === d.id && l.category === 'Home'))
-                          .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
-                      </optgroup>
+                      <>
+                        <optgroup label="Customers & Partners">
+                          {destinations
+                            .filter(d => !locations.some(l => l.id === d.id && l.category === 'Home'))
+                            .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
+                        </optgroup>
+                        <optgroup label="Trucks (In-Transit)">
+                          {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={`dest-transit-${l.id}`} value={l.id}>{l.name}</option>)}
+                        </optgroup>
+                      </>
                     )}
-                    <optgroup label="Trucks (In-Transit)">
-                      {locations.filter(l => l.type === LocationType.IN_TRANSIT).map(l => <option key={`dest-transit-${l.id}`} value={l.id}>{l.name}</option>)}
-                    </optgroup>
                   </select>
                 </label>
               </div>
@@ -521,34 +511,44 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
 
               {!isReadOnly && (
                 <>
-                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6 transition-all">
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
-                      <select 
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
-                        value={truckId}
-                        onChange={e => setTruckId(e.target.value)}
-                      >
-                        <option value="">Select Truck</option>
-                        {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
-                      <select 
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
-                        value={driverId}
-                        onChange={e => handleDriverChange(e.target.value)}
-                      >
-                        <option value="">Select Driver</option>
-                        {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
+                  <div className={`p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6 transition-all ${isInternal ? 'opacity-50 grayscale' : ''}`}>
+                    {!isInternal ? (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
+                          <select 
+                            disabled={isInternal}
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                            value={truckId}
+                            onChange={e => setTruckId(e.target.value)}
+                          >
+                            <option value="">Select Truck</option>
+                            {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
+                          <select 
+                            disabled={isInternal}
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
+                            value={driverId}
+                            onChange={e => handleDriverChange(e.target.value)}
+                          >
+                            <option value="">Select Driver</option>
+                            {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="md:col-span-2 flex items-center justify-center bg-white/50 rounded-xl border border-dashed border-blue-200 p-4">
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Internal Transfer: No Truck/Driver Required</p>
+                      </div>
+                    )}
+                    <div className="space-y-2 pointer-events-auto opacity-100 grayscale-0">
                       <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><ClipboardList size={14} /> Movement Date</h4>
                       <input 
                         type="date"
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
+                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white"
                         value={movementDate}
                         onChange={e => setMovementDate(e.target.value)}
                       />
