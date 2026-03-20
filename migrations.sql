@@ -54,27 +54,32 @@ FULL OUTER JOIN public.drivers d ON t.branch_id = d.branch_id;
 
 -- 3. Management KPIs View
 DROP VIEW IF EXISTS public.vw_management_kpis;
+-- Update vw_management_kpis to support the Management Report Pack UI
+DROP VIEW IF EXISTS public.vw_management_kpis CASCADE;
 CREATE OR REPLACE VIEW public.vw_management_kpis AS
-WITH cycle_times AS (
+WITH batch_stats AS (
     SELECT 
-        batch_id,
-        AVG(EXTRACT(EPOCH FROM (timestamp - created_at))/86400) as avg_days
-    FROM public.batch_movements bm
-    JOIN public.batches b ON bm.batch_id = b.id
-    GROUP BY batch_id
+        AVG(EXTRACT(DAY FROM (confirmation_date::timestamp - transaction_date::timestamp))) FILTER (WHERE transfer_confirmed_by_customer = true) as avg_cycle_time,
+        COUNT(*) as total_batches,
+        SUM(quantity) as total_units
+    FROM public.batches
 ),
-shrinkage AS (
+shrinkage_stats AS (
     SELECT 
-        location_id,
-        SUM(variance) as total_variance,
-        SUM(system_quantity) as total_expected
-    FROM public.stock_take_items sti
-    JOIN public.stock_takes st ON sti.stock_take_id = st.id
-    GROUP BY location_id
+        (SUM(ABS(variance))::float / NULLIF(SUM(system_quantity), 0)) * 100 as shrinkage_rate
+    FROM public.stock_take_items
+),
+financial_stats AS (
+    SELECT 
+        SUM(amount) as total_compliance_cost
+    FROM public.vw_branch_fleet_expenses
+    WHERE expense_date >= date_trunc('month', current_date)
 )
 SELECT 
-    (SELECT AVG(avg_days) FROM cycle_times) as avg_cycle_time,
-    (SELECT SUM(total_variance)::float / NULLIF(SUM(total_expected), 0) * 100 FROM shrinkage) as shrinkage_rate;
+    COALESCE(bs.avg_cycle_time, 0) as crate_cycle_time,
+    COALESCE(ss.shrinkage_rate, 0) as shrinkage_rate,
+    COALESCE(fs.total_compliance_cost, 0) as monthly_compliance_cost
+FROM batch_stats bs, shrinkage_stats ss, financial_stats fs;
 
 -- 4. Ensure RPCs handle TEXT IDs correctly
 -- (The existing split_batch and process_stock_take already use TEXT/UUID correctly in schema.sql)
@@ -181,7 +186,7 @@ SELECT
     t.id::text as truck_id,
     t.plate_number::text,
     'COF/Roadworthy'::text as expense_type,
-    COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0)::numeric as amount,
+    (COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0))::numeric as amount,
     rh.test_date::date as expense_date,
     t.license_doc_url::text
 FROM public.truck_roadworthy_history rh
@@ -311,12 +316,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ALTER TABLE public.business_parties ALTER COLUMN id TYPE TEXT;
 ALTER TABLE public.business_parties ALTER COLUMN id DROP DEFAULT;
 
-DROP VIEW IF EXISTS public.vw_business_directory;
+DROP VIEW IF EXISTS public.vw_business_directory CASCADE;
 CREATE OR REPLACE VIEW public.vw_business_directory AS
 SELECT 
     bp.id,
     bp.name,
     bp.party_type,
+    bp.address,
     COALESCE(asset_counts.type_count, 0) as asset_types,
     COALESCE(stock_counts.total_stock, 0) as current_stock
 FROM public.business_parties bp
@@ -377,7 +383,7 @@ GROUP BY 1, 2, 3;
 -- 14. Synchronize Views for Business Parties
 -- ==========================================
 
--- Update vw_all_sources to include branch_id
+-- Update vw_all_sources to include branch_id, type, category and In Transit locations
 DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
 CREATE OR REPLACE VIEW public.vw_all_sources AS
 SELECT 
@@ -385,16 +391,23 @@ SELECT
     name,
     partner_type,
     branch_id,
+    type,
+    category,
     name || ' (' || partner_type || ')' as display_name,
-    CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    CASE 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
+        ELSE 2 
+    END as sort_group
 FROM public.locations
-WHERE type != 'In Transit'
 UNION ALL
 SELECT 
     id::text,
     name,
     party_type as partner_type,
     NULL as branch_id,
+    'Business Party' as type,
+    'External' as category,
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group
 FROM public.business_parties;
@@ -410,6 +423,58 @@ DROP VIEW IF EXISTS public.vw_movement_destinations CASCADE;
 CREATE OR REPLACE VIEW public.vw_movement_destinations AS
 SELECT * FROM public.vw_all_sources
 ORDER BY sort_group, name;
+
+-- Module 1: Executive Dashboard Overhaul Views
+CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
+WITH stats AS (
+    SELECT
+        SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END) as available,
+        SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END) as at_customers,
+        SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END) as in_transit,
+        SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END) as maintenance,
+        SUM(b.quantity) as total_fleet,
+        -- Financial Alerts
+        SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END) as lost_missing,
+        SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END) as damaged,
+        SUM(public.calculate_batch_accrual(b.id)) as pending_charges,
+        (SELECT COUNT(*) FROM public.asset_losses WHERE is_settled = FALSE) as open_loss_cases,
+        -- Liability
+        SUM(public.calculate_batch_accrual(b.id)) as accrued_rental,
+        (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements) as settlement_liability,
+        (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer') as active_customers,
+        (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements WHERE transaction_date = CURRENT_DATE) as movements_today
+    FROM public.batches b
+    JOIN public.vw_all_sources s ON b.current_location_id = s.id
+)
+SELECT * FROM stats;
+
+CREATE OR REPLACE VIEW public.vw_batch_forensics AS
+SELECT 
+    bm.transaction_date as date,
+    bm.condition as type,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    bm.quantity
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+ORDER BY bm.timestamp DESC
+LIMIT 20;
+
+-- Module 2: Crates & Pallets Management Views
+CREATE OR REPLACE VIEW public.vw_asset_intelligence AS
+SELECT 
+    b.id as asset_code,
+    am.type as asset_type,
+    am.ownership_type as ownership,
+    b.status,
+    'Good' as condition, 
+    COALESCE(s.name, 'Unknown') as customer,
+    am.billing_model as charge_type,
+    public.calculate_batch_accrual(b.id) as accrued
+FROM public.batches b
+JOIN public.asset_master am ON b.asset_id = am.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- Update vw_master_logistics_trace to support business parties
 DROP VIEW IF EXISTS public.vw_master_logistics_trace CASCADE;
@@ -498,6 +563,43 @@ LEFT JOIN public.vw_all_sources s ON cr.customer_id = s.id
 JOIN public.asset_master am ON cr.asset_id = am.id
 WHERE cr.status = 'Pending';
 
+-- Trip Audit Trail View (Optimized with Lateral Join and All Sources)
+DROP VIEW IF EXISTS public.vw_trip_audit_trail CASCADE;
+CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
+SELECT 
+    bm.id as movement_id,
+    bm.timestamp as movement_time,
+    bm.transaction_date,
+    bm.batch_id,
+    bm.quantity,
+    bm.condition,
+    bm.route_instructions,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    d.full_name as driver_name,
+    d.id as driver_id,
+    t.plate_number as truck_plate,
+    t.id as truck_id,
+    t.branch_id,
+    ds.id as shift_id,
+    ds.start_time as shift_start,
+    ds.end_time as shift_end,
+    ds.manual_end_time as shift_manual_end,
+    ds.notes as shift_notes
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id
+LEFT JOIN LATERAL (
+    SELECT * FROM public.driver_shifts s
+    WHERE s.driver_id = bm.driver_id
+    AND s.truck_id = bm.truck_id
+    AND s.start_time <= bm.timestamp
+    ORDER BY s.start_time DESC
+    LIMIT 1
+) ds ON true;
+
 -- Update vw_batch_accruals to include branch_id and current_location name
 DROP VIEW IF EXISTS public.vw_batch_accruals CASCADE;
 CREATE OR REPLACE VIEW public.vw_batch_accruals AS
@@ -515,37 +617,98 @@ FROM public.batches b
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- ==========================================
--- 15. Relax Foreign Key Constraints
--- ==========================================
+-- 16. Executive Report View
+CREATE OR REPLACE VIEW public.vw_executive_report AS
+WITH branch_metrics AS (
+    SELECT 
+        b.id as branch_id,
+        b.name as branch_name,
+        -- Total units currently managed by this branch
+        COALESCE(SUM(bt.quantity), 0) as total_units,
+        -- Stagnant units (> 14 days)
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 14 AND bt.transfer_confirmed_by_customer = false THEN bt.quantity ELSE 0 END), 0) as stagnant_units,
+        -- Financial Drainage (> 21 days)
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 21 AND bt.transfer_confirmed_by_customer = false THEN public.calculate_batch_accrual(bt.id) ELSE 0 END), 0) as financial_drainage,
+        -- Loss Count (from asset_losses)
+        (
+            SELECT COALESCE(SUM(al.lost_quantity), 0)
+            FROM public.asset_losses al
+            JOIN public.locations l ON al.last_known_location_id = l.id
+            WHERE l.branch_id = b.id
+        ) as lost_units
+    FROM public.branches b
+    LEFT JOIN public.locations loc ON b.id = loc.branch_id
+    LEFT JOIN public.batches bt ON loc.id = bt.current_location_id
+    GROUP BY b.id, b.name
+),
+forensics AS (
+    -- Get the oldest stagnant batch for each branch
+    SELECT DISTINCT ON (l.branch_id)
+        l.branch_id,
+        bm.driver_id,
+        d.full_name as driver_name,
+        l.name as last_location,
+        bt.id as batch_id,
+        bt.transaction_date
+    FROM public.batches bt
+    JOIN public.locations l ON bt.current_location_id = l.id
+    LEFT JOIN public.batch_movements bm ON bt.id = bm.batch_id
+    LEFT JOIN public.drivers d ON bm.driver_id = d.id
+    WHERE (CURRENT_DATE - bt.transaction_date) > 14 
+      AND bt.transfer_confirmed_by_customer = false
+    ORDER BY l.branch_id, bt.transaction_date ASC, bm.timestamp DESC
+)
+SELECT 
+    m.branch_id,
+    m.branch_name,
+    m.total_units,
+    m.stagnant_units,
+    m.financial_drainage,
+    m.lost_units,
+    CASE WHEN (m.total_units + m.lost_units) > 0 THEN (m.lost_units::float / (m.total_units + m.lost_units)) * 100 ELSE 0 END as loss_ratio,
+    f.driver_name as oldest_stagnant_driver,
+    f.last_location as oldest_stagnant_location,
+    f.batch_id as oldest_stagnant_batch_id
+FROM branch_metrics m
+LEFT JOIN forensics f ON m.branch_id = f.branch_id;
 
-DO $$ 
-DECLARE 
-    r RECORD;
-BEGIN
-    -- Drop all foreign key constraints on batches(current_location_id)
-    FOR r IN (
-        SELECT constraint_name 
-        FROM information_schema.key_column_usage 
-        WHERE table_name = 'batches' AND column_name = 'current_location_id'
-    ) LOOP
-        EXECUTE 'ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
-    END LOOP;
+-- 19. Trip Planning Enhancements
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS scheduled_date DATE;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS scheduled_departure_time TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS start_odometer INTEGER;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS end_odometer INTEGER;
 
-    -- Drop all foreign key constraints on batch_movements(from_location_id)
-    FOR r IN (
-        SELECT constraint_name 
-        FROM information_schema.key_column_usage 
-        WHERE table_name = 'batch_movements' AND column_name = 'from_location_id'
-    ) LOOP
-        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
-    END LOOP;
+-- 20. Address Support
+ALTER TABLE public.locations ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.business_parties ADD COLUMN IF NOT EXISTS address TEXT;
 
-    -- Drop all foreign key constraints on batch_movements(to_location_id)
-    FOR r IN (
-        SELECT constraint_name 
-        FROM information_schema.key_column_usage 
-        WHERE table_name = 'batch_movements' AND column_name = 'to_location_id'
-    ) LOOP
-        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
-    END LOOP;
-END $$;
+-- Update vw_all_sources to include address
+DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
+CREATE OR REPLACE VIEW public.vw_all_sources AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    branch_id,
+    type,
+    category,
+    address,
+    name || ' (' || partner_type || ')' as display_name,
+    CASE 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
+        ELSE 2 
+    END as sort_group
+FROM public.locations
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    NULL as branch_id,
+    'Business Party' as type,
+    'External' as category,
+    address,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties;
