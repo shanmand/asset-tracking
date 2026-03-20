@@ -406,8 +406,6 @@ SELECT
     name,
     partner_type,
     branch_id,
-    type,
-    category,
     name || ' (' || partner_type || ')' as display_name,
     CASE 
         WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
@@ -421,23 +419,9 @@ SELECT
     name,
     party_type as partner_type,
     NULL as branch_id,
-    'Business Party' as type,
-    'External' as category,
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group
 FROM public.business_parties;
-
--- 17b. All Origins View
-DROP VIEW IF EXISTS public.vw_all_origins CASCADE;
-CREATE OR REPLACE VIEW public.vw_all_origins AS
-SELECT * FROM public.vw_all_sources
-ORDER BY sort_group, name;
-
--- 17c. Movement Destinations View
-DROP VIEW IF EXISTS public.vw_movement_destinations CASCADE;
-CREATE OR REPLACE VIEW public.vw_movement_destinations AS
-SELECT * FROM public.vw_all_sources
-ORDER BY sort_group, name;
 
 -- 18. Global Inventory Tracker View
 DROP VIEW IF EXISTS public.vw_global_inventory_tracker;
@@ -638,8 +622,6 @@ LEFT JOIN public.trucks t ON bm.truck_id = t.id;
 INSERT INTO public.branches (id, name) VALUES ('BR-001', 'Johannesburg Central') ON CONFLICT DO NOTHING;
 INSERT INTO public.locations (id, name, type, category, branch_id) VALUES ('LOC-WH-01', 'Main Warehouse', 'Warehouse', 'Home', 'BR-001') ON CONFLICT DO NOTHING;
 INSERT INTO public.locations (id, name, type, category, branch_id) VALUES ('LOC-ST-01', 'Retail Store A', 'Store', 'External', 'BR-001') ON CONFLICT DO NOTHING;
-INSERT INTO public.locations (id, name, type, category, branch_id) VALUES ('LOC-TRANS-01', 'Truck GP 22 SH (Lupo)', 'In Transit', 'External', 'BR-001') ON CONFLICT DO NOTHING;
-INSERT INTO public.locations (id, name, type, category, branch_id) VALUES ('LOC-TRANS-02', 'Truck CA 99 LU (Lupo)', 'In Transit', 'External', 'BR-001') ON CONFLICT DO NOTHING;
 INSERT INTO public.asset_master (id, name, type) VALUES ('SH-P01', 'Standard Pallet', 'Pallet') ON CONFLICT DO NOTHING;
 INSERT INTO public.trucks (id, plate_number, branch_id) VALUES ('TRK-001', 'GP 123 SH', 'BR-001') ON CONFLICT DO NOTHING;
 INSERT INTO public.drivers (id, full_name, branch_id) VALUES ('DRV-001', 'John Doe', 'BR-001') ON CONFLICT DO NOTHING;

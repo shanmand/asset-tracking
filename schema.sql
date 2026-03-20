@@ -5,7 +5,6 @@
 -- ==========================================
 
 -- 1. CLEANUP (DROP EVERYTHING)
-DROP VIEW IF EXISTS public.vw_executive_report CASCADE;
 DROP VIEW IF EXISTS public.vw_daily_burn_rate CASCADE;
 DROP TABLE IF EXISTS public.stock_take_items CASCADE;
 DROP TABLE IF EXISTS public.stock_takes CASCADE;
@@ -54,7 +53,6 @@ CREATE TABLE public.locations (
     category TEXT NOT NULL, -- Home, External
     branch_id TEXT REFERENCES public.branches(id),
     partner_type TEXT DEFAULT 'Internal', -- Internal, Customer, Supplier
-    address TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -77,7 +75,6 @@ CREATE TABLE public.trucks (
     plate_number TEXT NOT NULL UNIQUE,
     license_disc_expiry DATE,
     last_renewal_cost_zar NUMERIC DEFAULT 0,
-    license_doc_url TEXT,
     branch_id TEXT REFERENCES public.branches(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -194,34 +191,6 @@ CREATE TABLE public.batches (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.trips (
-    id TEXT PRIMARY KEY, -- e.g. TRIP-20240319-001
-    driver_id TEXT REFERENCES public.drivers(id),
-    truck_id TEXT REFERENCES public.trucks(id),
-    route_name TEXT,
-    status TEXT DEFAULT 'Planned', -- Planned, In Progress, Completed, Cancelled
-    scheduled_date DATE,
-    scheduled_departure_time TEXT,
-    start_odometer INTEGER,
-    end_odometer INTEGER,
-    start_time TIMESTAMPTZ,
-    end_time TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE public.trip_stops (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    trip_id TEXT REFERENCES public.trips(id) ON DELETE CASCADE,
-    location_id TEXT, -- FK to locations or business_parties
-    sequence_number INTEGER NOT NULL,
-    planned_arrival TIMESTAMPTZ,
-    actual_arrival TIMESTAMPTZ,
-    actual_departure TIMESTAMPTZ,
-    status TEXT DEFAULT 'Pending', -- Pending, Arrived, Departed, Skipped
-    notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE public.batch_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     batch_id TEXT REFERENCES public.batches(id),
@@ -229,8 +198,6 @@ CREATE TABLE public.batch_movements (
     to_location_id TEXT,   -- Relaxed to accept both locations and business parties
     truck_id TEXT REFERENCES public.trucks(id),
     driver_id TEXT REFERENCES public.drivers(id),
-    trip_id TEXT REFERENCES public.trips(id), -- Link movement to a trip
-    trip_stop_id UUID REFERENCES public.trip_stops(id), -- Link movement to a specific stop
     condition TEXT DEFAULT 'Clean',
     route_instructions TEXT,
     origin_user_id UUID REFERENCES public.users(id),
@@ -278,13 +245,12 @@ CREATE TABLE public.claims (
 );
 
 CREATE TABLE public.business_parties (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     party_type TEXT NOT NULL, -- Customer, Supplier
     contact_person TEXT,
     email TEXT,
     phone TEXT,
-    address TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -763,8 +729,6 @@ ALTER TABLE public.stock_takes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_take_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.claim_audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.trip_stops ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "branches_select" ON public.branches FOR SELECT TO authenticated USING (true);
 CREATE POLICY "branches_manage" ON public.branches FOR ALL TO authenticated USING (true) WITH CHECK (true);
@@ -806,10 +770,6 @@ CREATE POLICY "claim_audits_select" ON public.claim_audits FOR SELECT TO authent
 CREATE POLICY "claim_audits_manage" ON public.claim_audits FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "audit_logs_select" ON public.audit_logs FOR SELECT TO authenticated USING (true);
 CREATE POLICY "audit_logs_manage" ON public.audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "trips_select" ON public.trips FOR SELECT TO authenticated USING (true);
-CREATE POLICY "trips_manage" ON public.trips FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "trip_stops_select" ON public.trip_stops FOR SELECT TO authenticated USING (true);
-CREATE POLICY "trip_stops_manage" ON public.trip_stops FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- 7. SEED DATA
 INSERT INTO public.branches (id, name) VALUES ('BR-01', 'Kya Sands'), ('BR-02', 'Durban') ON CONFLICT DO NOTHING;
@@ -817,25 +777,8 @@ INSERT INTO public.branches (id, name) VALUES ('BR-01', 'Kya Sands'), ('BR-02', 
 INSERT INTO public.locations (id, name, type, category, branch_id, partner_type) VALUES 
 ('LOC-JHB-01', 'Lupo JHB Main Plant (Kya Sands)', 'Crates Dept', 'Home', 'BR-01', 'Internal'),
 ('LOC-DBN-01', 'Lupo Durban Plant', 'Crates Dept', 'Home', 'BR-02', 'Internal'),
-('LOC-JHB-WH1', 'Kya Sands Warehouse 1', 'Warehouse', 'Internal', 'BR-01', 'Internal'),
-('LOC-JHB-WH2', 'Kya Sands Warehouse 2', 'Warehouse', 'Internal', 'BR-01', 'Internal'),
 ('LOC-SUP-01', 'Crate Suppliers JHB', 'Supplier', 'External', 'BR-01', 'Supplier'),
-('LOC-CUST-01', 'Checkers Hyper Sandton', 'At Customer', 'External', 'BR-01', 'Customer'),
-('LOC-TRANSIT-01', 'Truck GP 123 SH (JHB)', 'In Transit', 'Internal', 'BR-01', 'Internal'),
-('LOC-TRANSIT-02', 'Truck GP 456 SH (JHB)', 'In Transit', 'Internal', 'BR-01', 'Internal'),
-('LOC-TRANSIT-03', 'Truck ND 789 DBN (DBN)', 'In Transit', 'Internal', 'BR-02', 'Internal')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.trucks (id, plate_number, branch_id) VALUES 
-('TRK-001', 'GP 123 SH', 'BR-01'),
-('TRK-002', 'GP 456 SH', 'BR-01'),
-('TRK-003', 'ND 789 DBN', 'BR-02')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.drivers (id, full_name, branch_id) VALUES 
-('DRV-001', 'John Doe', 'BR-01'),
-('DRV-002', 'Jane Smith', 'BR-01'),
-('DRV-003', 'Sipho Zulu', 'BR-02')
+('LOC-CUST-01', 'Checkers Hyper Sandton', 'Customer', 'External', 'BR-01', 'Customer')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.asset_master (id, name, type, dimensions, material, supplier_id) VALUES 
@@ -888,73 +831,12 @@ SELECT
     t.id::text as truck_id,
     t.plate_number::text,
     'COF/Roadworthy'::text as expense_type,
-    (COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0))::numeric as amount,
+    COALESCE(rh.test_fee_zar, 0) + COALESCE(rh.repair_costs_zar, 0)::numeric as amount,
     rh.test_date::date as expense_date,
     t.license_doc_url::text
 FROM public.truck_roadworthy_history rh
 JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
-
--- Fleet Compliance Alerts View
-CREATE OR REPLACE VIEW public.vw_fleet_compliance_alerts AS
-SELECT 
-    t.id as truck_id,
-    t.plate_number,
-    t.license_disc_expiry as license_expiry,
-    d.id as driver_id,
-    d.full_name as driver_name,
-    d.license_expiry as driver_license_expiry,
-    d.prdp_expiry,
-    CASE 
-        WHEN t.license_disc_expiry < CURRENT_DATE THEN 'Expired'
-        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
-        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '90 days' THEN 'Warning'
-        ELSE 'Valid'
-    END as truck_status,
-    CASE 
-        WHEN d.license_expiry < CURRENT_DATE OR d.prdp_expiry < CURRENT_DATE THEN 'Expired'
-        WHEN d.license_expiry < CURRENT_DATE + INTERVAL '30 days' OR d.prdp_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
-        ELSE 'Valid'
-    END as driver_status
-FROM public.trucks t
-LEFT JOIN public.drivers d ON t.branch_id = d.branch_id;
-
--- Fleet Readiness View
-CREATE OR REPLACE VIEW public.vw_fleet_readiness AS
-SELECT 
-    t.id as truck_id,
-    t.plate_number,
-    t.branch_id,
-    b.name as branch_name,
-    t.license_disc_expiry,
-    CASE 
-        WHEN t.license_disc_expiry < CURRENT_DATE THEN 'Expired'
-        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
-        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '90 days' THEN 'Warning'
-        ELSE 'Compliant'
-    END as license_status,
-    COALESCE(t.last_renewal_cost_zar, 0) as last_renewal_cost,
-    (
-        SELECT COALESCE(SUM(test_fee_zar + repair_costs_zar), 0)
-        FROM public.truck_roadworthy_history
-        WHERE truck_id = t.id AND test_date >= DATE_TRUNC('year', CURRENT_DATE)
-    ) as ytd_roadworthy_costs,
-    (
-        SELECT result
-        FROM public.truck_roadworthy_history
-        WHERE truck_id = t.id
-        ORDER BY test_date DESC
-        LIMIT 1
-    ) as last_roadworthy_result,
-    (
-        SELECT expiry_date
-        FROM public.truck_roadworthy_history
-        WHERE truck_id = t.id
-        ORDER BY test_date DESC
-        LIMIT 1
-    ) as roadworthy_expiry
-FROM public.trucks t
-LEFT JOIN public.branches b ON t.branch_id = b.id;
 
 CREATE OR REPLACE VIEW public.vw_all_origins AS
 SELECT * FROM public.vw_all_sources
@@ -975,99 +857,39 @@ INSERT INTO public.collection_requests (customer_id, asset_id, estimated_quantit
 ON CONFLICT DO NOTHING;
 
 -- 18. Management Reporting Views
-DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
 CREATE OR REPLACE VIEW public.vw_all_sources AS
-SELECT 
-    id,
-    name,
-    partner_type,
-    branch_id,
-    type,
-    category,
-    address,
-    name || ' (' || partner_type || ')' as display_name,
-    CASE 
-        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
-        WHEN type = 'In Transit' THEN 3
-        ELSE 2 
-    END as sort_group
-FROM public.locations
-UNION ALL
-SELECT 
-    id::text,
-    name,
-    party_type as partner_type,
-    NULL as branch_id,
-    'Business Party' as type,
-    'External' as category,
-    address,
-    name || ' (' || party_type || ')' as display_name,
-    2 as sort_group
-FROM public.business_parties;
-
--- Update vw_all_origins to be consistent
-DROP VIEW IF EXISTS public.vw_all_origins CASCADE;
-CREATE OR REPLACE VIEW public.vw_all_origins AS
-SELECT * FROM public.vw_all_sources
-ORDER BY sort_group, name;
-
--- Update vw_movement_destinations to be consistent
-DROP VIEW IF EXISTS public.vw_movement_destinations CASCADE;
-CREATE OR REPLACE VIEW public.vw_movement_destinations AS
-SELECT * FROM public.vw_all_sources
-ORDER BY sort_group, name;
-
--- Module 1: Executive Dashboard Overhaul Views
-CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
-WITH stats AS (
-    SELECT
-        COALESCE(SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END), 0) as available,
-        COALESCE(SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END), 0) as at_customers,
-        COALESCE(SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END), 0) as in_transit,
-        COALESCE(SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END), 0) as maintenance,
-        COALESCE(SUM(b.quantity), 0) as total_fleet,
-        -- Financial Alerts
-        COALESCE(SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END), 0) as lost_missing,
-        COALESCE(SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END), 0) as damaged,
-        COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as pending_charges,
-        (SELECT COUNT(*) FROM public.asset_losses WHERE is_settled = FALSE) as open_loss_cases,
-        -- Liability
-        COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental,
-        (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements) as settlement_liability,
-        (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer') as active_customers,
-        (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements WHERE transaction_date = CURRENT_DATE) as movements_today
-    FROM public.batches b
-    JOIN public.vw_all_sources s ON b.current_location_id = s.id
+WITH combined AS (
+    SELECT 
+        id,
+        name,
+        partner_type,
+        branch_id,
+        name || ' (' || partner_type || ')' as display_name,
+        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
+    FROM public.locations
+    WHERE type != 'In Transit'
+    UNION ALL
+    SELECT 
+        id::text,
+        name,
+        party_type as partner_type,
+        NULL as branch_id,
+        name || ' (' || party_type || ')' as display_name,
+        2 as sort_group
+    FROM public.business_parties
 )
-SELECT * FROM stats;
-
-CREATE OR REPLACE VIEW public.vw_batch_forensics AS
-SELECT 
-    bm.transaction_date as date,
-    bm.condition as type,
-    s_from.name as from_location,
-    s_to.name as to_location,
-    bm.quantity
-FROM public.batch_movements bm
-LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
-LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
-ORDER BY bm.timestamp DESC
-LIMIT 20;
-
--- Module 2: Crates & Pallets Management Views
-CREATE OR REPLACE VIEW public.vw_asset_intelligence AS
-SELECT 
-    b.id as asset_code,
-    am.type as asset_type,
-    am.ownership_type as ownership,
-    b.status,
-    'Good' as condition, 
-    COALESCE(s.name, 'Unknown') as customer,
-    am.billing_model as charge_type,
-    public.calculate_batch_accrual(b.id) as accrued
-FROM public.batches b
-JOIN public.asset_master am ON b.asset_id = am.id
-LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+SELECT * FROM (
+    SELECT DISTINCT ON (id)
+        id,
+        name,
+        partner_type,
+        branch_id,
+        display_name,
+        sort_group
+    FROM combined
+    ORDER BY id, sort_group ASC
+) sub
+ORDER BY sort_group ASC, name ASC;
 
 -- Relax foreign key on batches to allow business party IDs
 ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_current_location_id_fkey;
@@ -1122,15 +944,15 @@ FROM batch_stats bs, shrinkage_stats ss, financial_stats fs;
 
 CREATE OR REPLACE VIEW public.vw_location_unconfirmed_value AS
 SELECT 
-    s.id as location_id,
-    s.name as location_name,
-    s.branch_id,
+    l.id as location_id,
+    l.name as location_name,
+    l.branch_id,
     SUM(b.quantity) as unit_count,
     SUM(b.quantity * 450) as estimated_value_zar
 FROM public.batches b
-JOIN public.vw_all_sources s ON b.current_location_id = s.id
+JOIN public.locations l ON b.current_location_id = l.id
 WHERE b.transfer_confirmed_by_customer = false
-GROUP BY s.id, s.name, s.branch_id;
+GROUP BY l.id, l.name, l.branch_id;
 
 CREATE OR REPLACE VIEW public.vw_batch_accruals AS
 SELECT 
@@ -1138,36 +960,19 @@ SELECT
     b.asset_id,
     b.quantity,
     b.current_location_id,
-    s.name as current_location,
-    s.branch_id,
     b.transaction_date,
     b.transfer_confirmed_by_customer,
     public.calculate_batch_accrual(b.id) as accrued_amount
-FROM public.batches b
-LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+FROM public.batches b;
 INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
-('SH-001', 'Daily Rental (Supermarket)', 5.50, '2026-01-01'),
+('SH-001', 'Daily Rental (Standard)', 5.50, '2026-01-01'),
 ('SH-P01', 'Replacement Fee (Lost Equipment)', 1200.00, '2026-01-01')
 ON CONFLICT DO NOTHING;
 
 -- Seed Disputed Batches & Claims
 INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date) VALUES 
 ('B-DISP-001', 'SH-001', 50, 'LOC-CUST-01', 'Disputed', '2026-03-01'),
-('B-DISP-002', 'SH-P01', 10, 'LOC-CUST-01', 'Disputed', '2026-03-05'),
-('B-STAG-001', 'SH-001', 120, 'LOC-JHB-01', 'Success', CURRENT_DATE - INTERVAL '25 days'),
-('B-STAG-002', 'SH-P01', 45, 'LOC-DBN-01', 'Success', CURRENT_DATE - INTERVAL '30 days'),
-('B-STAG-003', 'SH-001', 85, 'LOC-JHB-WH1', 'Success', CURRENT_DATE - INTERVAL '18 days')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.batch_movements (batch_id, from_location_id, to_location_id, truck_id, driver_id, condition, origin_user_id, quantity, transaction_date) VALUES 
-('B-STAG-001', 'LOC-SUP-01', 'LOC-JHB-01', 'TRK-001', 'DRV-001', 'Clean', NULL, 120, CURRENT_DATE - INTERVAL '25 days'),
-('B-STAG-002', 'LOC-SUP-01', 'LOC-DBN-01', 'TRK-003', 'DRV-003', 'Clean', NULL, 45, CURRENT_DATE - INTERVAL '30 days'),
-('B-STAG-003', 'LOC-SUP-01', 'LOC-JHB-WH1', 'TRK-002', 'DRV-002', 'Clean', NULL, 85, CURRENT_DATE - INTERVAL '18 days')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.asset_losses (batch_id, loss_type, lost_quantity, last_known_location_id, transaction_date) VALUES 
-('B-STAG-001', 'Shrinkage', 5, 'LOC-JHB-01', CURRENT_DATE - INTERVAL '5 days'),
-('B-STAG-002', 'Damaged', 2, 'LOC-DBN-01', CURRENT_DATE - INTERVAL '10 days')
+('B-DISP-002', 'SH-P01', 10, 'LOC-CUST-01', 'Disputed', '2026-03-05')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.claims (id, batch_id, type, amount_claimed_zar, status) VALUES 
@@ -1175,10 +980,6 @@ INSERT INTO public.claims (id, batch_id, type, amount_claimed_zar, status) VALUE
 ('CLM-002', 'B-DISP-002', 'Dirty', 1200.00, 'Under Assessment')
 ON CONFLICT DO NOTHING;
 
--- Drop the view first to avoid column mismatch errors
-DROP VIEW IF EXISTS public.vw_trip_audit_trail;
-
--- Create/Update the Trip Audit Trail View (Optimized with Lateral Join and All Sources)
 CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
 SELECT 
     bm.id as movement_id,
@@ -1188,106 +989,22 @@ SELECT
     bm.quantity,
     bm.condition,
     bm.route_instructions,
-    s_from.name as from_location,
-    s_to.name as to_location,
+    fl.name as from_location,
+    tl.name as to_location,
     d.full_name as driver_name,
     d.id as driver_id,
     t.plate_number as truck_plate,
     t.id as truck_id,
     t.branch_id,
-    ds.id as shift_id,
     ds.start_time as shift_start,
     ds.end_time as shift_end,
     ds.manual_end_time as shift_manual_end,
     ds.notes as shift_notes
 FROM public.batch_movements bm
-LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
-LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.locations fl ON bm.from_location_id = fl.id
+LEFT JOIN public.locations tl ON bm.to_location_id = tl.id
 LEFT JOIN public.drivers d ON bm.driver_id = d.id
 LEFT JOIN public.trucks t ON bm.truck_id = t.id
-LEFT JOIN LATERAL (
-    SELECT * FROM public.driver_shifts s
-    WHERE s.driver_id = bm.driver_id
-    AND s.truck_id = bm.truck_id
-    AND s.start_time <= bm.timestamp
-    ORDER BY s.start_time DESC
-    LIMIT 1
-) ds ON true;
-
--- Executive Report View
-CREATE OR REPLACE VIEW public.vw_executive_report AS
-WITH branch_metrics AS (
-    SELECT 
-        b.id as branch_id,
-        b.name as branch_name,
-        -- Total units currently managed by this branch
-        COALESCE(SUM(bt.quantity), 0) as total_units,
-        -- Stagnant units (> 14 days)
-        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 14 AND bt.transfer_confirmed_by_customer = false THEN bt.quantity ELSE 0 END), 0) as stagnant_units,
-        -- Financial Drainage (> 21 days)
-        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 21 AND bt.transfer_confirmed_by_customer = false THEN public.calculate_batch_accrual(bt.id) ELSE 0 END), 0) as financial_drainage,
-        -- Loss Count (from asset_losses)
-        (
-            SELECT COALESCE(SUM(al.lost_quantity), 0)
-            FROM public.asset_losses al
-            JOIN public.locations l ON al.last_known_location_id = l.id
-            WHERE l.branch_id = b.id
-        ) as lost_units
-    FROM public.branches b
-    LEFT JOIN public.locations loc ON b.id = loc.branch_id
-    LEFT JOIN public.batches bt ON loc.id = bt.current_location_id
-    GROUP BY b.id, b.name
-),
-forensics AS (
-    -- Get the oldest stagnant batch for each branch
-    SELECT DISTINCT ON (l.branch_id)
-        l.branch_id,
-        bm.driver_id,
-        d.full_name as driver_name,
-        l.name as last_location,
-        bt.id as batch_id,
-        bt.transaction_date
-    FROM public.batches bt
-    JOIN public.locations l ON bt.current_location_id = l.id
-    LEFT JOIN public.batch_movements bm ON bt.id = bm.batch_id
-    LEFT JOIN public.drivers d ON bm.driver_id = d.id
-    WHERE (CURRENT_DATE - bt.transaction_date) > 14 
-      AND bt.transfer_confirmed_by_customer = false
-    ORDER BY l.branch_id, bt.transaction_date ASC, bm.timestamp DESC
-)
-SELECT 
-    m.branch_id,
-    m.branch_name,
-    m.total_units,
-    m.stagnant_units,
-    m.financial_drainage,
-    m.lost_units,
-    CASE WHEN (m.total_units + m.lost_units) > 0 THEN (m.lost_units::float / (m.total_units + m.lost_units)) * 100 ELSE 0 END as loss_ratio,
-    f.driver_name as oldest_stagnant_driver,
-    f.last_location as oldest_stagnant_location,
-    f.batch_id as oldest_stagnant_batch_id
-FROM branch_metrics m
-LEFT JOIN forensics f ON m.branch_id = f.branch_id;
-
--- Business Directory View
-DROP VIEW IF EXISTS public.vw_business_directory CASCADE;
-CREATE OR REPLACE VIEW public.vw_business_directory AS
-SELECT 
-    bp.id,
-    bp.name,
-    bp.party_type,
-    bp.address,
-    COALESCE(asset_counts.type_count, 0) as asset_types,
-    COALESCE(stock_counts.total_stock, 0) as current_stock
-FROM public.business_parties bp
-LEFT JOIN (
-    SELECT supplier_id, count(*) as type_count
-    FROM public.asset_master
-    GROUP BY supplier_id
-) asset_counts ON bp.id = asset_counts.supplier_id
-LEFT JOIN (
-    SELECT am.supplier_id, sum(b.quantity) as total_stock
-    FROM public.batches b
-    JOIN public.asset_master am ON b.asset_id = am.id
-    GROUP BY am.supplier_id
-) stock_counts ON bp.id = stock_counts.supplier_id;
+LEFT JOIN public.driver_shifts ds ON bm.driver_id = ds.driver_id 
+    AND bm.timestamp >= ds.start_time 
+    AND (bm.timestamp <= ds.end_time OR ds.end_time IS NULL);

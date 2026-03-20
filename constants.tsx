@@ -53,15 +53,13 @@ const generateMockData = () => {
   const batches: Batch[] = [];
   const movements: BatchMovement[] = [];
   const assetsIds = ['SH-001', 'SH-002', 'SH-003', 'SH-P01', 'SH-P02'];
-  const locationsIds = ['LOC-JHB-01', 'LOC-CPT-01', 'LOC-DBN-01', 'LOC-CUST-01', 'LOC-CUST-02', 'LOC-COLD-01', 'LOC-TRANS-01', 'LOC-TRANS-02'];
+  const locationsIds = ['LOC-JHB-01', 'LOC-CPT-01', 'LOC-DBN-01', 'LOC-CUST-01', 'LOC-CUST-02', 'LOC-COLD-01'];
   
   for (let i = 1; i <= 105; i++) {
     const assetId = assetsIds[Math.floor(Math.random() * assetsIds.length)];
     const batchId = `LB-BATCH-${i.toString().padStart(3, '0')}`;
     const qty = Math.floor(Math.random() * 400) + 50;
     const locId = locationsIds[Math.floor(Math.random() * locationsIds.length)];
-    const location = MOCK_LOCATIONS.find(l => l.id === locId);
-    const branchId = location?.branch_id || (locId.includes('JHB') ? 'Kya Sands' : (locId.includes('DBN') ? 'Durban' : 'Kya Sands'));
     const date = new Date(Date.now() - Math.floor(Math.random() * 60) * 24 * 60 * 60 * 1000).toISOString();
     
     batches.push({
@@ -70,8 +68,7 @@ const generateMockData = () => {
       quantity: qty,
       current_location_id: locId,
       created_at: date,
-      status: Math.random() > 0.1 ? 'Success' : 'Pending',
-      condition: MovementCondition.CLEAN
+      status: Math.random() > 0.1 ? 'Success' : 'Pending'
     });
 
     movements.push({
@@ -79,8 +76,6 @@ const generateMockData = () => {
       batch_id: batchId,
       from_location_id: 'LOC-JHB-01',
       to_location_id: locId,
-      quantity: qty,
-      transaction_date: date.split('T')[0],
       timestamp: date,
       condition: Math.random() > 0.05 ? MovementCondition.CLEAN : MovementCondition.DIRTY,
       origin_user_id: 'U-003',
